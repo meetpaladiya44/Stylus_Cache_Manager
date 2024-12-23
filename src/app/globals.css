@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  background-color: #171717;
+  color: black;
+  --sb-track-color: linear-gradient(to right, #da619c, #ff844a), #0a11b5;
+  --sb-thumb-color: white;
+  --sb-size: 2px;
+  font-family: "Hellix";
+  scrollbar-color: var(--sb-thumb-color) var(--sb-track-color);
+}
+@font-face {
+  font-family: "Hellix";
+  src: url("/fonts/Hellix.ttf") format(ttf);
+
+  font-style: normal;
+}
+body::-webkit-scrollbar {
+  width: 4px;
+}
+
+body::-webkit-scrollbar-track {
+  background: var(--sb-track-color);
+  border-radius: 10px;
+}
+
+body::-webkit-scrollbar-thumb {
+  background: var(--sb-thumb-color);
+  border-radius: 10px;
+}
+
+selected-operators::-webkit-scrollbar {
+  width: var(--sb-size);
+}
+
+.main {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+/* Custom scrollbar styling */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 2px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #888; 
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background-color: #f1f1f1; /* Change to desired color */
+}
+/* .ant-carousel .slick-dots-bottom {
+  bottom: -13px;
+} */
+
+.ant-carousel .slick-next {
+  right: -23px;
+  top: 96px;
+}
+.ant-carousel .slick-prev {
+  left: -23px;
+  top: 96px;
+}
+.carousel .slick-slide {
+  transition: transform 0.9s ease-in-out; /* Adjust the speed here */
+}
+/* Custom Carousel Navigation Styles */
+.carousel .slick-prev,
+.carousel .slick-next {
+  border-radius: 50%;
+  color: #fc8151; /* Text color */
+
+  text-align: center; /* Center the text horizontally */
+}
+
+.carousel .slick-prev:hover,
+.carousel .slick-next:hover {
+  color: #f1f1f1; /* Change to your desired hover color */
+}
+
+.stake {
+  border: 1px solid transparent;
+  border-image: linear-gradient(to right, #ffa800, #da619c);
+  border-image-slice: 1;
+  background-color: white;
+  color: #171717;
+  transition: all 0.3s ease;
+}
+.stake:hover {
+  box-shadow: 0 4px 15px rgba(218, 97, 156, 0.4),
+    0 4px 15px rgba(255, 132, 74, 0.4);
+
+  /* background: linear-gradient(to right, #DA619C, #FF844A);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-fill-color: transparent; */
+}

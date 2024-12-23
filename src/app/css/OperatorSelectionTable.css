@@ -1,0 +1,195 @@
+.operator-selection-container {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 10px;
+  color: white;
+  font-family: Arial, sans-serif;
+}
+
+/* For the operator table */
+.operator-table {
+  max-height: 400px; /* Adjust the height as per your design */
+  overflow-y: auto;
+}
+
+/* For the selected operators section */
+.selected-operators {
+  max-height: 400px; /* Adjust the height as per your design */
+  overflow-y: auto;
+}
+
+.scroll {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Scrollbar Styles for the Operator Table */
+.operator-table::-webkit-scrollbar {
+  width: 3px;
+}
+
+.operator-table::-webkit-scrollbar-track {
+  background: var(--sb-track-color);
+  border-radius: 10px;
+}
+
+.operator-table::-webkit-scrollbar-thumb {
+  background: var(--sb-thumb-color);
+  border-radius: 10px;
+}
+
+/* Scrollbar Styles for the Selected Operators Section */
+.selected-operators::-webkit-scrollbar {
+  width: 3px;
+}
+
+.selected-operators::-webkit-scrollbar-track {
+  background: var(--sb-track-color);
+  border-radius: 10px;
+}
+
+.selected-operators::-webkit-scrollbar-thumb {
+  background: var(--sb-thumb-color);
+  border-radius: 10px;
+}
+
+.selected-operators {
+  overflow-y: auto; /* Enable vertical scrolling */
+  overflow-x: hidden; /* Prevent horizontal scrolling */
+  padding-right: 16px; /* Add padding to prevent clipping at the right edge */
+  box-sizing: border-box; /* Ensure padding is included in the element's width */
+}
+
+/* Prevent Horizontal Scrollbars */
+.operator-table,
+.selected-operators {
+  overflow-y: auto; /* Enable vertical scrolling */
+}
+
+.table-container {
+  flex-grow: 1;
+}
+
+h2 {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.cluster-size-selector {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.cluster-size-selector button {
+  padding: 0.5rem 1rem;
+  background-color: transparent;
+  border: 1px solid #4a5568;
+  color: white;
+  cursor: pointer;
+}
+
+.cluster-size-selector button.active {
+  background-color: #4a5568;
+}
+
+.search-filter {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.search-container {
+  position: relative;
+  flex-grow: 1;
+}
+
+.search-container input {
+  width: 100%;
+  padding: 0.5rem 1rem 0.5rem 2.5rem;
+  background-color: #171717;
+  border: 1px solid gray;
+  color: white;
+}
+
+.search-icon {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.filter-button {
+  padding: 0.5rem 1rem;
+  background-color: transparent;
+  border: 1px solid #4a5568;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.filter-icon {
+  margin-right: 0.5rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #4a5568;
+}
+
+tbody tr:hover {
+  background-color: #2d3748;
+  cursor: pointer;
+}
+
+.selected-operators {
+  width: 16rem;
+}
+
+.selected-operator,
+.empty-operator {
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+  background-color: #2d3748;
+  border-width: 2px;
+  border-style: solid;
+  border-color: linear-gradient(180deg, #a257ec 0%, #da619c 100%);
+  border-radius: 0.25rem;
+}
+
+.empty-operator {
+  border: 1px dashed #4a5568;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.pagination-button {
+  margin: 0 5px;
+  padding: 5px 10px;
+  border: 1px solid #A257EC;
+  background: #161515;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.pagination-button:hover {
+  background: linear-gradient(to right, #A257EC, #DA619C);
+}
+
+.pagination-button.active {
+  background: linear-gradient(to right, #A257EC, #DA619C);
+}
