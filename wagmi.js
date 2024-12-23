@@ -1,16 +1,15 @@
-
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
 import {
   mainnet,
-  arbitrumSepolia
+  holesky
 } from 'wagmi/chains';
 
 export const config = getDefaultConfig({
-  appName: 'arbitrum nitro stylus',
-  projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_ID,
+  appName: 'ConnectKit demo',
+  projectId: 'f8a6524307e28135845a9fe5811fcaa2',
   chains: [
     mainnet,
-    arbitrumSepolia
+    holesky
   ],
   ssr: true,
 });
