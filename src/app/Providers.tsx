@@ -31,10 +31,10 @@ const storage = {
 const config = createConfig(
   getDefaultConfig({
     // Your dApps chains
-    chains: [mainnet,arbitrumSepolia],
+    chains: [arbitrumSepolia],
 
     transports: {
-      [mainnet.id]: http(),
+      // [mainnet.id]: http(),
       [arbitrumSepolia.id]: http(),
     },
 
