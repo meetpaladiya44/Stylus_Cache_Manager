@@ -1,7 +1,7 @@
 "use client";
 import "../css/Landing.css";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   PieChart,
   Pie,
@@ -14,6 +14,9 @@ import {
   Legend,
   ResponsiveContainer,
   Cell,
+  ReferenceLine,
+  Area,
+  ComposedChart,
 } from "recharts";
 import { ArrowUpCircle, Database, Box, Activity, Zap } from "lucide-react";
 import { ethers } from "ethers";
@@ -22,6 +25,13 @@ import {
   getContract,
   getProvider,
 } from "@/utils/CacheManagerUtils";
+
+type RawEntry = [string, number, number]; // [codeHash, size, ethBid]
+type FormattedEntry = {
+  codeHash: string | any;
+  size: number | any;
+  ethBid: number | any;
+};
 
 const CacheManagerPage = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -75,6 +85,15 @@ const CacheManagerPage = () => {
   });
 
   const COLORS = ["#0088FE", "#00C49F"];
+
+  // Add this transformation function
+  const formatEntries = (entries: RawEntry[]): FormattedEntry[] => {
+    return entries.map((entry) => ({
+      codeHash: entry[0],
+      size: BigInt(entry[1]),
+      ethBid: entry[2],
+    }));
+  };
 
   // Initial data fetch
   useEffect(() => {
@@ -149,6 +168,50 @@ const CacheManagerPage = () => {
     }
   };
 
+  const formatProxyResult = (proxyResult: any) => {
+    // Convert BigInt to string to avoid JSON serialization issues
+    const formatValue = (value: any) => {
+      if (typeof value === "bigint") {
+        return value.toString();
+      }
+      return value;
+    };
+
+    // Format a single entry into a named object
+    const formatEntry = (entry: any) => {
+      return {
+        codeHash: formatValue(entry[0]),
+        size: formatValue(entry[1]),
+        bid: formatValue(entry[2]),
+      };
+    };
+
+    // Check if the input is array-like (has numeric keys)
+    if (
+      Array.isArray(proxyResult) ||
+      (typeof proxyResult === "object" && proxyResult !== null)
+    ) {
+      // Get all enumerable keys
+      const keys = Object.keys(proxyResult);
+
+      // If it's an array-like object with numeric keys
+      if (keys.every((key: any) => !isNaN(key))) {
+        // If it's a single entry (has only 3 elements)
+        if (keys.length === 3) {
+          return formatEntry(proxyResult);
+        }
+        // If it's an array of entries
+        return keys.map((key) => {
+          const entry = proxyResult[key];
+          return formatEntry(entry);
+        });
+      }
+    }
+
+    // Return the value as is if it's not in the expected format
+    return formatValue(proxyResult);
+  };
+
   const fetchEntries = async () => {
     try {
       console.log("inside fetch entries");
@@ -159,35 +222,13 @@ const CacheManagerPage = () => {
       const rawEntries: any = await contract.getEntries();
       console.log("Raw entries object:", rawEntries);
 
-      // Extract keys from rawEntries
-      const keys = Object.keys(rawEntries); // Get the numeric keys
-      console.log("Keys in rawEntries:", keys);
+      const formattedEntries = formatProxyResult(rawEntries);
+      console.log("Formatted entries:", formattedEntries);
 
-      // Access values using the keys
-      const rawArray = keys.map((key) => rawEntries[key]);
-      console.log("Extracted array from rawEntries:", rawArray);
-
-      // Filter and validate entries
-      const processedEntries = await rawArray.reduce((acc, entry, index) => {
-        console.log("Processing entry at index", index, ":", entry);
-        // try {
-        //   if (ethers.isAddress(entry)) {
-        acc.push(entry);
-        //   } else {
-        //     console.warn(`Invalid entry at index ${index}:`, entry);
-        //   }
-        // } catch (error) {
-        //   console.warn(`Error processing entry at index ${index}:`, entry);
-        // }
-        return acc;
-      }, []);
-
-      // Update state
-      const numberOfEntries = await processedEntries.length;
-      const lastTenEntries = processedEntries.slice(-10).reverse();
+      const numberOfEntries = formattedEntries.length;
+      const lastTenEntries = formattedEntries.slice(-10).reverse();
       setEntriesCount(numberOfEntries);
-      setEntries(processedEntries);
-      //   setEntries(lastTenEntries);
+      setEntries(formattedEntries);
       setSuccessMessage(`Fetched ${numberOfEntries} valid entries.`);
     } catch (error) {
       console.error("Error fetching entries:", error);
@@ -196,6 +237,15 @@ const CacheManagerPage = () => {
       setIsLoading(false);
     }
   };
+
+  const chartData = useMemo(() => {
+    return entries.map((entry: any, index: any) => ({
+      index: index + 1, // Use index + 1 for x-axis
+      codeHash: entry.codeHash.slice(0, 6) + "...",
+      size: Number(entry.size),
+      bid: Number(ethers.formatEther(entry.bid)),
+    }));
+  }, [entries]);
 
   const handlePlaceBid = async () => {
     try {
@@ -251,6 +301,56 @@ const CacheManagerPage = () => {
     }
   };
 
+  const chartDataMinBid = useMemo(() => {
+    const bids = entries.map((entry: any, index: any) => ({
+      index: index + 1,
+      codeHash: entry.codeHash.slice(0, 6) + "...",
+      currentBid: Number(ethers.formatEther(entry.bid)),
+    }));
+
+    // Calculate running minimum bid
+    let minSoFar = Infinity;
+    const withMinBid = bids.map((item) => {
+      minSoFar = Math.min(minSoFar, item.currentBid);
+      return {
+        ...item,
+        minBid: minSoFar,
+        avgBid: (minSoFar + item.currentBid) / 2,
+      };
+    });
+
+    return withMinBid;
+  }, [entries]);
+
+  // Calculate overall minimum bid for reference line
+  const overallMinBid = Math.min(...chartData.map((item: any) => item.minBid));
+
+  const chartDataCacheSize = useMemo(() => {
+    let totalSize = 0;
+
+    return entries.map((entry: any, index: any) => {
+      const currentSize = Number(entry.size);
+      totalSize += currentSize;
+
+      return {
+        index: index + 1,
+        codeHash: entry.codeHash.slice(0, 10) + "...",
+        currentSize: currentSize,
+        averageSize: totalSize / (index + 1),
+        cumulativeSize: totalSize,
+      };
+    });
+  }, [entries]);
+
+  // Calculate average size for reference
+  const averageSize =
+    chartDataCacheSize.length > 0
+      ? chartDataCacheSize.reduce(
+          (sum: any, item: any) => sum + item.currentSize,
+          0
+        ) / chartDataCacheSize.length
+      : 0;
+
   return (
     <div className="p-6 space-y-8 bg-gray-50 min-h-screen">
       <h1 className="text-3xl font-bold text-gray-800 mb-8">
@@ -263,7 +363,7 @@ const CacheManagerPage = () => {
             <div>
               <p className="text-sm opacity-80">Cache Size</p>
               <h3 className="text-2xl font-bold mt-1">
-                {cacheSize + " " + "KiB"}
+                {cacheSize + " " + "Bytes"}
               </h3>
             </div>
             <Database className="w-8 h-8 opacity-80" />
@@ -283,7 +383,7 @@ const CacheManagerPage = () => {
             <div>
               <p className="text-sm opacity-80">Queue Size</p>
               <h3 className="text-2xl font-bold mt-1">
-                {queueSize + " " + "KiB"}
+                {queueSize + " " + "Bytes"}
               </h3>
             </div>
             <Box className="w-8 h-8 opacity-80" />
@@ -365,44 +465,124 @@ const CacheManagerPage = () => {
 
         {/* Cache Size Over Time */}
         <div className="bg-white p-6 rounded-xl shadow-lg">
-          <h2 className="text-xl font-semibold mb-4">Cache Size Over Time</h2>
+          <h2 className="text-xl font-semibold mb-4">
+            Cache Size Distribution
+          </h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={timeSeriesData}>
+              <ComposedChart data={chartDataCacheSize}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="timestamp" />
-                <YAxis />
-                <Tooltip />
+                <XAxis
+                  dataKey="codeHash"
+                  interval={5}
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                  tick={{ fontSize: 5 }}
+                />
+                <YAxis
+                  label={{
+                    value: "Size (bytes)",
+                    angle: -90,
+                    position: "insideLeft",
+                    fontSize: 12,
+                  }}
+                  tick={{ fontSize: 8 }}
+                />
+                <Tooltip
+                  formatter={(value) => `${value.toLocaleString()} bytes`}
+                  labelFormatter={(label) => `Code Hash: ${label}`}
+                />
                 <Legend />
+                {/* <ReferenceLine
+                  y={averageSize}
+                  stroke="#ff7300"
+                  strokeDasharray="3 3"
+                  label={{
+                    value: "Average Size",
+                    position: "bottom",
+                    fill: "#ff7300",
+                  }}
+                /> */}
                 <Line
                   type="monotone"
-                  dataKey="cacheSize"
+                  dataKey="currentSize"
                   stroke="#8884d8"
-                  name="Cache Size"
+                  name="Entry Size"
+                  dot={{ r: 4 }}
                 />
-              </LineChart>
+                <Line
+                  type="monotone"
+                  dataKey="averageSize"
+                  stroke="#82ca9d"
+                  name="Running Average"
+                  strokeDasharray="5 5"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="cumulativeSize"
+                  fill="#8884d8"
+                  stroke="#8884d8"
+                  fillOpacity={0.1}
+                  name="Cumulative Size"
+                />
+              </ComposedChart>
             </ResponsiveContainer>
+          </div>
+          <div className="mt-4 text-sm text-gray-600 flex justify-between">
+            <span>
+              Total Cache Size:{" "}
+              {chartDataCacheSize[
+                chartDataCacheSize.length - 1
+              ]?.cumulativeSize.toLocaleString()}{" "}
+              bytes
+            </span>
+            <span>
+              Average Entry Size: {averageSize.toLocaleString()} bytes
+            </span>
           </div>
         </div>
 
         {/* Contract Entries Over Time */}
         <div className="bg-white p-6 rounded-xl shadow-lg">
           <h2 className="text-xl font-semibold mb-4">
-            Contract Entries Over Time
+            Contract Entries Analysis
           </h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={timeSeriesData}>
+              <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="timestamp" />
-                <YAxis />
-                <Tooltip />
+                <XAxis
+                  dataKey="codeHash"
+                  interval={5}
+                  angle={-45}
+                  textAnchor="end"
+                  height={70}
+                  tick={{ fontSize: 5 }}
+                />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip
+                  formatter={(value: any, name: any) => {
+                    if (name === "bid") return `${value.toFixed(4)} ETH`;
+                    if (name === "size")
+                      return `${value.toLocaleString()} bytes`;
+                    return value;
+                  }}
+                />
                 <Legend />
                 <Line
                   type="monotone"
-                  dataKey="entries"
+                  dataKey="size"
                   stroke="#82ca9d"
-                  name="Number of Entries"
+                  name="Size (bytes)"
+                  dot={{ r: 4 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="bid"
+                  stroke="#8884d8"
+                  name="Bid (ETH)"
+                  dot={{ r: 4 }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -411,20 +591,64 @@ const CacheManagerPage = () => {
 
         {/* Minimum Bid Over Time */}
         <div className="bg-white p-6 rounded-xl shadow-lg">
-          <h2 className="text-xl font-semibold mb-4">Minimum Bid Over Time</h2>
+          <h2 className="text-xl font-semibold mb-4">
+            Minimum Bid Analysis Over Entries
+          </h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={timeSeriesData}>
+              <LineChart data={chartDataMinBid}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="timestamp" />
-                <YAxis />
-                <Tooltip />
+                <XAxis
+                  dataKey="codeHash"
+                  interval={1}
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                  tick={{ fontSize: 5 }}
+                />
+                <YAxis
+                  label={{
+                    value: "ETH",
+                    angle: -90,
+                    position: "insideLeft",
+                  }}
+                  tick={{ fontSize: 12 }}
+                />
+                <Tooltip
+                  formatter={(value: any) => `${value.toFixed(6)} ETH`}
+                  labelFormatter={(label) => `Code Hash: ${label}`}
+                />
                 <Legend />
+                <ReferenceLine
+                  y={overallMinBid}
+                  stroke="red"
+                  strokeDasharray="3 3"
+                  label={{
+                    value: "Minimum Bid Threshold",
+                    position: "top",
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="currentBid"
+                  stroke="#ffc658"
+                  name="Current Bid"
+                  dot={{ r: 4 }}
+                />
                 <Line
                   type="monotone"
                   dataKey="minBid"
-                  stroke="#ffc658"
-                  name="Minimum Bid (ETH)"
+                  stroke="#ff7300"
+                  name="Minimum Bid"
+                  dot={{ r: 4 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="avgBid"
+                  stroke="#82ca9d"
+                  name="Average Bid"
+                  dot={{ r: 4 }}
+                  strokeDasharray="5 5"
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -443,25 +667,25 @@ const CacheManagerPage = () => {
                   Code Hash
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Size
+                  Size (Bytes)
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Bid Amount
+                  Bid Amount (ETH)
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {entries.length > 0 ? (
-                entries.map((entry: any, index: any) => (
+                entries?.map((entry: any, index: any) => (
                   <tr key={index}>
                     <td className="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-500">
-                      {entry[0]}
+                      {entry?.codeHash}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {Number(entry[1])}
+                      {Number(entry?.size).toFixed(2)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {ethers.formatEther(BigInt(entry[2]))}
+                      {ethers.formatEther(BigInt(entry?.bid))}
                     </td>
                   </tr>
                 ))
@@ -606,12 +830,12 @@ const CacheManagerPage = () => {
             {smallestEntries && (
               <div>
                 {/* Remaining entries in scrollable container */}
-                {smallestEntries.length > 5 && (
+                {smallestEntries.length > 0 && (
                   <div className="max-h-48 overflow-y-auto">
                     <ul className="space-y-2">
                       {smallestEntries.map((entry, index) => (
                         <li
-                          key={index + 5}
+                          key={index}
                           className="font-mono bg-white p-2 rounded text-black"
                         >
                           {entry}
