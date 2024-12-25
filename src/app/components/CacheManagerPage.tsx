@@ -748,7 +748,7 @@ const CacheManagerPage = () => {
             <div className="flex flex-col sm:flex-row gap-2">
               <button
                 onClick={handlePlaceBid}
-                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition duration-200"
+                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition duration-200 hover:cursor-pointer"
                 disabled={isLoading || !contractAddress || !bidAmount}
               >
                 {isLoading ? "Placing Bid..." : "Place Bid"}
@@ -790,7 +790,7 @@ const CacheManagerPage = () => {
                 />
                 <button
                   onClick={() => fetchSmallestEntries(smallestEntriesCount)}
-                  className="bg-gray-1000 hover:bg-gray-600 text-white px-4 py-2 rounded transition duration-200 w-1/2"
+                  className="bg-gray-600 hover:bg-gray-800 hover:cursor-pointer text-white px-4 py-2 rounded transition duration-200 w-1/2"
                   disabled={fetchingSmallestEntries || !smallestEntriesCount}
                 >
                   {fetchingSmallestEntries

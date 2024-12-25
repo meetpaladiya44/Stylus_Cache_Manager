@@ -63,6 +63,17 @@ const AIAgentDashboard = () => {
     },
   ]);
 
+  const [decayData, setDecayData] = useState([
+    { time: "0h", decayRate: 0.15, predictedDecay: 0.15 },
+    { time: "3h", decayRate: 0.18, predictedDecay: 0.17 },
+    { time: "6h", decayRate: 0.22, predictedDecay: 0.2 },
+    { time: "9h", decayRate: 0.25, predictedDecay: 0.23 },
+    { time: "12h", decayRate: 0.29, predictedDecay: 0.26 },
+    { time: "15h", decayRate: 0.32, predictedDecay: 0.3 },
+    { time: "18h", decayRate: 0.36, predictedDecay: 0.34 },
+    { time: "21h", decayRate: 0.4, predictedDecay: 0.38 },
+  ]);
+
   const [contractParams] = useState({
     minBid: 0.15,
     timeLeft: "2h 15m",
@@ -105,10 +116,10 @@ const AIAgentDashboard = () => {
   const [historicalData, setHistoricalData] = useState<
     DashboardData["historicalData"]
   >([
-    { timestamp: "12:00", risk: 0.30, bid: 0.15, threshold: 0.40 },
+    { timestamp: "12:00", risk: 0.3, bid: 0.15, threshold: 0.4 },
     { timestamp: "13:00", risk: 0.25, bid: 0.38, threshold: 0.5 },
     { timestamp: "14:00", risk: 0.15, bid: 0.25, threshold: 0.4 },
-    { timestamp: "15:00", risk: 0.280, bid: 0.42, threshold: 0.325 },
+    { timestamp: "15:00", risk: 0.28, bid: 0.42, threshold: 0.325 },
     { timestamp: "16:00", risk: 0.42, bid: 0.24, threshold: 0.309 },
   ]);
 
@@ -134,6 +145,7 @@ const AIAgentDashboard = () => {
     setHistoricalData(newData.historicalData);
     setModelMetrics(newData.modelMetrics);
     setAiMetrics(newData.aiMetrics);
+    setDecayData(newData.decayData);
   };
 
   const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042"];
@@ -181,7 +193,7 @@ const AIAgentDashboard = () => {
             <div>
               <p className="text-sm opacity-80">Optimal Bid</p>
               <h3 className="text-2xl font-bold mt-1">
-                {riskMetrics.optimalBid.toFixed(2)} ETH
+                {riskMetrics.optimalBid.toFixed(3)} ETH
               </h3>
             </div>
             <DollarSign className="w-8 h-8 opacity-80" />
@@ -253,9 +265,7 @@ const AIAgentDashboard = () => {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="timestamp" />
                 <YAxis />
-                <Tooltip
-                  formatter={(value: number) => `${value.toFixed(3)}`}
-                />
+                <Tooltip formatter={(value: number) => `${value.toFixed(3)}`} />
                 <Legend />
                 <Line
                   type="monotone"
@@ -281,7 +291,7 @@ const AIAgentDashboard = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-lg">
+        {/* <div className="bg-white p-6 rounded-xl shadow-lg">
           <h2 className="text-xl font-semibold mb-4">
             Model Performance Metrics
           </h2>
@@ -305,6 +315,36 @@ const AIAgentDashboard = () => {
                   ))}
                 </Bar>
               </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div> */}
+
+        <div className="bg-white p-6 rounded-xl shadow-lg">
+          <h2 className="text-xl font-semibold mb-4">Decay Rate Analysis</h2>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={decayData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="time" />
+                <YAxis />
+                <Tooltip
+                  formatter={(value: number) => `${(value * 100).toFixed(1)}%`}
+                />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="decayRate"
+                  stroke="#ef4444"
+                  name="Actual Decay"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="predictedDecay"
+                  stroke="#3b82f6"
+                  name="Predicted Decay"
+                  strokeDasharray="5 5"
+                />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -356,39 +396,33 @@ const AIAgentDashboard = () => {
                 <div className="flex justify-between mb-2">
                   <span className="text-gray-600">Bid Difference</span>
                   <span className="font-semibold">
-                    {aiMetrics.bidDifference.toFixed(2)} ETH
+                    {aiMetrics.bidDifference.toFixed(3)} ETH
                   </span>
                 </div>
                 <div className="h-2 bg-gray-100 rounded-full">
-                  <div
-                    className="h-2 bg-blue-500 rounded-full"
-                  />
+                  <div className="h-2 bg-blue-500 rounded-full" />
                 </div>
               </div>
               <div className="mb-4">
                 <div className="flex justify-between mb-2">
                   <span className="text-gray-600">Time Pressure</span>
                   <span className="font-semibold">
-                    {aiMetrics.timePressure * 100}%
+                    {(aiMetrics.timePressure * 100).toFixed(3)}%
                   </span>
                 </div>
                 <div className="h-2 bg-gray-100 rounded-full">
-                  <div
-                    className="h-2 bg-yellow-500 rounded-full"
-                  />
+                  <div className="h-2 bg-yellow-500 rounded-full" />
                 </div>
               </div>
               <div className="mb-4">
                 <div className="flex justify-between mb-2">
                   <span className="text-gray-600">Stake to Bid Ratio</span>
                   <span className="font-semibold">
-                    {aiMetrics.stakeToBidRatio}x
+                    {aiMetrics.stakeToBidRatio.toFixed(3)}x
                   </span>
                 </div>
                 <div className="h-2 bg-gray-100 rounded-full">
-                  <div
-                    className="h-2 bg-green-500 rounded-full"
-                  />
+                  <div className="h-2 bg-green-500 rounded-full" />
                 </div>
               </div>
             </div>
