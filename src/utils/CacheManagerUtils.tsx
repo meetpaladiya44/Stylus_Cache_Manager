@@ -1,5 +1,6 @@
 import { ethers, BrowserProvider } from "ethers";
 import { cacheManagerConfig } from "@/config/CacheManagerConfig";
+import abiOfPrecompile from "../libs/ArbWasmPrecompile.json";
 
 declare global {
   interface Window {
@@ -13,18 +14,6 @@ export const checkNetwork = async (provider: ethers.BrowserProvider) => {
   if (Number(network.chainId) !== requiredChainId) {
     throw new Error(`Please switch to Sepolia testnet`);
   }
-};
-
-export const estimateGasWithBuffer = async (
-  contract: ethers.Contract,
-  functionName: string,
-  args: any[]
-) => {
-  const gasEstimate = await contract
-    .getFunction(functionName)
-    .estimateGas(...args);
-  console.log("gasEstimate", gasEstimate);
-  return (gasEstimate * BigInt(120)) / BigInt(100);
 };
 
 // Initialize ethers.js Provider
@@ -46,6 +35,30 @@ export const getContract = async () => {
   const contract = new ethers.Contract(
     cacheManagerConfig.arbitrum_one.contracts.cacheManager.address,
     cacheManagerConfig.arbitrum_one.contracts.cacheManager.abi,
+    signer
+  );
+  console.log("contract::", contract);
+  return contract;
+};
+
+export const getPrecompiledProvider = async () => {
+  try {
+    const provider = new ethers.JsonRpcProvider("https://arb1.arbitrum.io/rpc");
+    return provider;
+  } catch (error) {
+    console.error("Failed to connect to the Arbitrum RPC node:", error);
+    throw new Error("Unable to establish a connection to the Arbitrum RPC node");
+  }
+};
+
+export const getPrecompiledContract = async () => {
+  console.log("inside get contract");
+
+  const provider = await getProvider();
+  const signer = await provider.getSigner();
+  const contract = new ethers.Contract(
+    '0x0000000000000000000000000000000000000071',
+    abiOfPrecompile,
     signer
   );
   console.log("contract::", contract);
@@ -83,4 +96,16 @@ export const displayDecay = (rawDecay: any) => {
       </ul>
     </div>
   );
+};
+
+export const estimateGasWithBuffer = async (
+  contract: ethers.Contract,
+  functionName: string,
+  args: any[]
+) => {
+  const gasEstimate = await contract
+    .getFunction(functionName)
+    .estimateGas(...args);
+  console.log("gasEstimate", gasEstimate);
+  return (gasEstimate * BigInt(120)) / BigInt(100);
 };

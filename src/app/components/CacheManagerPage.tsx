@@ -18,13 +18,16 @@ import {
   Area,
   ComposedChart,
 } from "recharts";
-import { ArrowUpCircle, Database, Box, Activity, Zap } from "lucide-react";
+import { ArrowUpCircle, Database, Box, Activity, Zap, Bot } from "lucide-react";
 import { ethers } from "ethers";
 import {
   displayDecay,
   getContract,
   getProvider,
+  getPrecompiledContract,
+  getPrecompiledProvider,
 } from "@/utils/CacheManagerUtils";
+import { useRouter } from "next/navigation";
 
 type RawEntry = [string, number, number]; // [codeHash, size, ethBid]
 type FormattedEntry = {
@@ -83,6 +86,8 @@ const CacheManagerPage = () => {
     isPaused: false,
     minBid: null,
   });
+
+  const router = useRouter();
 
   const COLORS = ["#0088FE", "#00C49F"];
 
@@ -226,7 +231,6 @@ const CacheManagerPage = () => {
       console.log("Formatted entries:", formattedEntries);
 
       const numberOfEntries = formattedEntries.length;
-      const lastTenEntries = formattedEntries.slice(-10).reverse();
       setEntriesCount(numberOfEntries);
       setEntries(formattedEntries);
       setSuccessMessage(`Fetched ${numberOfEntries} valid entries.`);
@@ -350,6 +354,10 @@ const CacheManagerPage = () => {
           0
         ) / chartDataCacheSize.length
       : 0;
+
+  const handleAskAI = () => {
+    router.push("/ask-ai"); 
+  }
 
   return (
     <div className="p-6 space-y-8 bg-gray-50 min-h-screen">
@@ -568,6 +576,7 @@ const CacheManagerPage = () => {
                       return `${value.toLocaleString()} bytes`;
                     return value;
                   }}
+                  labelFormatter={(label) => `Code Hash: ${label}`}
                 />
                 <Legend />
                 <Line
@@ -737,19 +746,20 @@ const CacheManagerPage = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-2">
-              {/* <button
-              onClick={() => fetchMinBid(minBidParam)}
-              className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded transition duration-200"
-              disabled={isLoading || !contractAddress}
-            >
-              {isLoading ? "Fetching..." : "Get Minimum Bid"}
-            </button> */}
               <button
                 onClick={handlePlaceBid}
                 className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition duration-200"
                 disabled={isLoading || !contractAddress || !bidAmount}
               >
                 {isLoading ? "Placing Bid..." : "Place Bid"}
+              </button>
+
+              <button
+                onClick={handleAskAI}
+                className="flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded shadow-lg transition duration-200"
+              >
+                <Bot className="w-5 h-5" />
+                Ask AI
               </button>
             </div>
 
@@ -761,44 +771,6 @@ const CacheManagerPage = () => {
           </div>
         </div>
 
-        {/* <div className="bg-white p-6 rounded-xl shadow-lg ">
-          <h2 className="text-xl font-semibold mb-4 text-black">
-            Fetch Smallest Entries
-          </h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Number of Entries
-              </label>
-              <input
-                type="number"
-                placeholder="Enter number"
-                value={smallestEntriesCount}
-                onChange={(e) => setSmallestEntriesCount(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded text-black"
-              />
-            </div>
-            <button
-              onClick={() => fetchSmallestEntries(smallestEntriesCount)}
-              className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded transition duration-200"
-              disabled={fetchingSmallestEntries || !smallestEntriesCount}
-            >
-              {fetchingSmallestEntries ? "Fetching..." : "Get Smallest Entries"}
-            </button>
-            {smallestEntries && (
-              <ul className="space-y-2 ">
-                {smallestEntries.map((entry, index) => (
-                  <li
-                    key={index}
-                    className="font-mono bg-white p-2 rounded text-black overflow-auto"
-                  >
-                    {entry}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div> */}
         <div className="bg-white p-6 rounded-xl shadow-lg ">
           <h2 className="text-xl font-semibold mb-4 text-black">
             Fetch Smallest Entries
