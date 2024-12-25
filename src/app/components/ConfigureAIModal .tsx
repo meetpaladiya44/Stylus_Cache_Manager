@@ -40,6 +40,11 @@ interface DashboardData {
     predictionAccuracy: number;
     lastOptimization: string;
   };
+  decayData: Array<{
+    time: string;
+    decayRate: number;
+    predictedDecay: number;
+  }>;
 }
 
 const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
@@ -76,47 +81,45 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
     const bidAmount = parseFloat(monthlyBid);
 
     const calculateNewMetrics = (): DashboardData => {
-      const riskFactor =
-        bidAmount >= 1.0 ? 0.2 : bidAmount >= 0.5 ? 0.35 : 0.65;
-      const utilizationFactor =
-        bidAmount >= 1.0 ? 85 : bidAmount >= 0.5 ? 65 : 45;
+        // More dynamic risk factor calculation
+        const riskFactor = bidAmount >= 1.0 ? 0.15 : bidAmount >= 0.5 ? 0.45 : 0.75;
+        const utilizationFactor = Math.min(95, bidAmount * 100);
 
-      return {
-        riskMetrics: {
-          currentRisk: riskFactor,
-          optimalBid: bidAmount * 0.8,
-          timeToEviction:
-            bidAmount >= 1.0
-              ? "4h 30m"
-              : bidAmount >= 0.5
-              ? "2h 15m"
-              : "1h 30m",
-          budgetUtilization: utilizationFactor,
-        },
-        historicalData: Array(5)
-          .fill(null)
-          .map((_, i) => ({
+        const baseDecayRate = bidAmount >= 1.0 ? 0.15 : bidAmount >= 0.5 ? 0.25 : 0.35;
+      
+        return {
+          riskMetrics: {
+            currentRisk: riskFactor,
+            optimalBid: bidAmount * (1 + Math.random() * 0.2),
+            timeToEviction: bidAmount >= 1.0 ? "8h 30m" : bidAmount >= 0.5 ? "4h 15m" : "2h 00m",
+            budgetUtilization: utilizationFactor,
+          },
+          historicalData: Array(5).fill(null).map((_, i) => ({
             timestamp: `${12 + i}:00`,
-            risk: riskFactor + (Math.random() * 0.1 - 0.05),
-            bid: bidAmount * (0.8 + (Math.random() * 0.2 - 0.1)),
-            threshold: bidAmount * 1.2,
+            risk: Math.max(0.1, Math.min(0.9, riskFactor + (Math.random() * 0.3 - 0.15))),
+            bid: bidAmount * (0.7 + Math.random() * 0.6),
+            threshold: bidAmount * (1.2 + Math.random() * 0.3),
           })),
-        modelMetrics: {
-          accuracy: bidAmount >= 1.0 ? 95 : bidAmount >= 0.5 ? 90 : 85,
-          precision: bidAmount >= 1.0 ? 93 : bidAmount >= 0.5 ? 88 : 83,
-          recall: bidAmount >= 1.0 ? 96 : bidAmount >= 0.5 ? 91 : 86,
-          f1Score: bidAmount >= 1.0 ? 94 : bidAmount >= 0.5 ? 89 : 84,
-        },
-        aiMetrics: {
-          bidDifference: bidAmount * 0.1,
-          timePressure: riskFactor,
-          stakeToBidRatio: bidAmount * 2,
-          predictionAccuracy:
-            bidAmount >= 1.0 ? 97 : bidAmount >= 0.5 ? 94.5 : 92,
-          lastOptimization: "Just now",
-        },
+          modelMetrics: {
+            accuracy: Math.min(98, 85 + (bidAmount * 10)),
+            precision: Math.min(97, 82 + (bidAmount * 12)),
+            recall: Math.min(98, 84 + (bidAmount * 11)),
+            f1Score: Math.min(97, 83 + (bidAmount * 11)),
+          },
+          aiMetrics: {
+            bidDifference: bidAmount * (0.1 + Math.random() * 0.1),
+            timePressure: riskFactor + Math.random() * 0.1,
+            stakeToBidRatio: bidAmount * (2 + Math.random()),
+            predictionAccuracy: Math.min(98, 90 + (bidAmount * 5)),
+            lastOptimization: "Just now",
+          },
+          decayData: Array(8).fill(null).map((_, i) => ({
+            time: `${i * 3}h`,
+            decayRate: baseDecayRate * (1 + Math.random() * 0.3) * (1 + i * 0.1),
+            predictedDecay: baseDecayRate * (1 + i * 0.15)
+          }))
+        };
       };
-    };
 
     setTimeout(() => {
       const newData = calculateNewMetrics();
