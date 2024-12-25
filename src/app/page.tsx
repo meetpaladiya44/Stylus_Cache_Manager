@@ -8,9 +8,9 @@ import CacheManagerPage from "./components/CacheManagerPage";
 export default function Home() {
   return (
     <div className="">
-      <Navbar />
+      {/* <Navbar /> */}
       <CacheManagerPage />
-      <Footer />
+      {/* <Footer /> */}
     </div>
   );
 }
