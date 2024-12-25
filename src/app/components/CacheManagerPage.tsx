@@ -109,6 +109,8 @@ const CacheManagerPage = () => {
         await fetchDecay();
         await fetchQueueSize();
         await checkIsPaused();
+        // await getContractTransactions();
+        // await getPlaceBidTransactions();
       } catch (error) {
         console.error("Initialization error:", error);
         setErrorMessage("Failed to initialize: " + error);
@@ -356,8 +358,83 @@ const CacheManagerPage = () => {
       : 0;
 
   const handleAskAI = () => {
-    router.push("/ask-ai"); 
-  }
+    router.push("/ask-ai");
+  };
+
+  // async function getPlaceBidTransactions() {
+  //   // Connect to Ethereum mainnet
+  //   const provider = new ethers.JsonRpcProvider(
+  //     "https://sepolia-rollup.arbitrum.io/rpc"
+  //   );
+
+  //   // The contract address
+  //   const contractAddress = "0x0C9043D042aB52cFa8d0207459260040Cca54253";
+
+  //   try {
+  //     // Calculate placeBid function signature
+  //     const functionSignature = "placeBid(address)";
+  //     const functionHash = ethers.id(functionSignature).slice(0, 10);
+
+  //     console.log("Checking placeBid transactions");
+  //     console.log(`Function signature: ${functionSignature}`);
+  //     console.log(`Function hash: ${functionHash}`);
+
+  //     // Create a filter for events
+  //     const filter = {
+  //       address: contractAddress,
+  //       topics: [],
+  //       fromBlock: 0,
+  //       toBlock: "latest",
+  //     };
+
+  //     // Get logs
+  //     const logs = await provider.getLogs(filter);
+
+  //     // Get the actual transactions
+  //     const placeBidTxs = [];
+
+  //     for (const log of logs) {
+  //       // Get the transaction
+  //       const tx = await provider.getTransaction(log.transactionHash);
+
+  //       // Check if it's a placeBid transaction
+  //       if (tx && tx.data.startsWith(functionHash)) {
+  //         placeBidTxs.push(tx);
+  //       }
+  //     }
+
+  //     console.log(
+  //       `\nTotal successful placeBid transactions: ${placeBidTxs.length}`
+  //     );
+
+  //     // Print details of each placeBid transaction
+  //     for (const tx of placeBidTxs) {
+  //       // Decode the input data
+  //       const inputData = tx.data;
+  //       const addressParam = "0x" + inputData.slice(34, 74); // Extract the address parameter
+
+  //       console.log(`\nTransaction:`);
+  //       console.log(`- Hash: ${tx.hash}`);
+  //       console.log(`- Block: ${tx.blockNumber}`);
+  //       console.log(`- From: ${tx.from}`);
+  //       console.log(`- Program Address: ${addressParam}`);
+  //       console.log(`- Value: ${ethers.formatEther(tx.value)} ETH`);
+
+  //       // Get transaction receipt to confirm success
+  //       const receipt = await provider.getTransactionReceipt(tx.hash);
+  //       if (receipt) {
+  //         console.log(
+  //           `- Status: ${receipt.status === 1 ? "Success" : "Failed"}`
+  //         );
+  //       }
+  //     }
+
+  //     return placeBidTxs.length;
+  //   } catch (error) {
+  //     console.error("Error:", error);
+  //     throw error;
+  //   }
+  // }
 
   return (
     <div className="p-6 space-y-8 bg-gray-100 min-h-screen pl-[4rem] pr-[3rem]">
