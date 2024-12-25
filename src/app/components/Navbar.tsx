@@ -15,7 +15,7 @@ const Navbar = () => {
 
   if (!mounted) return null
   return (
-    <div className="pt-5 pb-5 mx-auto  w-[90%] ">
+    <div className="p-[1rem] pl-[2.3rem] pr-[3rem]">
       <div className="relative flex items-center justify-between">
         <a
           href="/"

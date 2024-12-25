@@ -360,7 +360,7 @@ const CacheManagerPage = () => {
   }
 
   return (
-    <div className="p-6 space-y-8 bg-gray-50 min-h-screen">
+    <div className="p-6 space-y-8 bg-gray-100 min-h-screen pl-[4rem] pr-[3rem]">
       <h1 className="text-3xl font-bold text-gray-800 mb-8">
         Cache Manager Analytics
       </h1>
@@ -670,7 +670,7 @@ const CacheManagerPage = () => {
         <h2 className="text-xl font-semibold mb-4">Current Contract Entries</h2>
         <div className="overflow-auto max-h-96">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50 sticky top-0">
+            <thead className="bg-gray-100 sticky top-0">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Code Hash
@@ -790,7 +790,7 @@ const CacheManagerPage = () => {
                 />
                 <button
                   onClick={() => fetchSmallestEntries(smallestEntriesCount)}
-                  className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded transition duration-200 w-1/2"
+                  className="bg-gray-1000 hover:bg-gray-600 text-white px-4 py-2 rounded transition duration-200 w-1/2"
                   disabled={fetchingSmallestEntries || !smallestEntriesCount}
                 >
                   {fetchingSmallestEntries
