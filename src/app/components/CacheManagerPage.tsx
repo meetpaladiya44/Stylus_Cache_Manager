@@ -35,6 +35,10 @@ type FormattedEntry = {
   size: number | any;
   ethBid: number | any;
 };
+interface Props {
+  entriesCount: number;
+  firstEntryDate: string; // ISO date string
+}
 
 const CacheManagerPage = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -59,10 +63,10 @@ const CacheManagerPage = () => {
   const [newDecayRate, setNewDecayRate] = useState("");
   const [evictCount, setEvictCount] = useState("");
 
-  const [cacheData, setCacheData] = useState({
-    used: 75,
-    available: 25,
-  });
+  // const [cacheData, setCacheData] = useState({
+  //   used: 75,
+  //   available: 25,
+  // });
 
   const [timeSeriesData, setTimeSeriesData] = useState([
     { timestamp: "00:00", cacheSize: 50, entries: 5, minBid: 0.1 },
@@ -361,80 +365,41 @@ const CacheManagerPage = () => {
     router.push("/ask-ai");
   };
 
-  // async function getPlaceBidTransactions() {
-  //   // Connect to Ethereum mainnet
-  //   const provider = new ethers.JsonRpcProvider(
-  //     "https://sepolia-rollup.arbitrum.io/rpc"
-  //   );
+  function calculateCacheSavings(): number {
+    const totalEntriesOfPlaceBid: any = entriesCount;
+    const differenceOfGasEstimation = 12685;
+    const bidValueInEth = 0.1;
 
-  //   // The contract address
-  //   const contractAddress = "0x0C9043D042aB52cFa8d0207459260040Cca54253";
+    const result =
+      totalEntriesOfPlaceBid * differenceOfGasEstimation - bidValueInEth;
+    return Math.round(result);
+  }
 
-  //   try {
-  //     // Calculate placeBid function signature
-  //     const functionSignature = "placeBid(address)";
-  //     const functionHash = ethers.id(functionSignature).slice(0, 10);
+  const calculateGasUsage = (): any => {
+    const totalEntriesOfPlaceBid = Number(77);
+    const gasWithoutCache = Number(14265);
+    const gasWithCache = Number(1580);
 
-  //     console.log("Checking placeBid transactions");
-  //     console.log(`Function signature: ${functionSignature}`);
-  //     console.log(`Function hash: ${functionHash}`);
+    const totalGasWithCache = totalEntriesOfPlaceBid * gasWithCache;
+    const totalGasWithoutCache = totalEntriesOfPlaceBid * gasWithoutCache;
+    const gasSaved = totalGasWithoutCache - totalGasWithCache;
 
-  //     // Create a filter for events
-  //     const filter = {
-  //       address: contractAddress,
-  //       topics: [],
-  //       fromBlock: 0,
-  //       toBlock: "latest",
-  //     };
+    return {
+      withCache: totalGasWithCache,
+      withoutCache: totalGasWithoutCache,
+      saved: gasSaved,
+    };
+  };
 
-  //     // Get logs
-  //     const logs = await provider.getLogs(filter);
+  // Example usage
+  const gasUsage = calculateGasUsage();
+  console.log(`Gas used with cache: ${gasUsage.withCache}`);
+  console.log(`Gas used without cache: ${gasUsage.withoutCache}`);
 
-  //     // Get the actual transactions
-  //     const placeBidTxs = [];
-
-  //     for (const log of logs) {
-  //       // Get the transaction
-  //       const tx = await provider.getTransaction(log.transactionHash);
-
-  //       // Check if it's a placeBid transaction
-  //       if (tx && tx.data.startsWith(functionHash)) {
-  //         placeBidTxs.push(tx);
-  //       }
-  //     }
-
-  //     console.log(
-  //       `\nTotal successful placeBid transactions: ${placeBidTxs.length}`
-  //     );
-
-  //     // Print details of each placeBid transaction
-  //     for (const tx of placeBidTxs) {
-  //       // Decode the input data
-  //       const inputData = tx.data;
-  //       const addressParam = "0x" + inputData.slice(34, 74); // Extract the address parameter
-
-  //       console.log(`\nTransaction:`);
-  //       console.log(`- Hash: ${tx.hash}`);
-  //       console.log(`- Block: ${tx.blockNumber}`);
-  //       console.log(`- From: ${tx.from}`);
-  //       console.log(`- Program Address: ${addressParam}`);
-  //       console.log(`- Value: ${ethers.formatEther(tx.value)} ETH`);
-
-  //       // Get transaction receipt to confirm success
-  //       const receipt = await provider.getTransactionReceipt(tx.hash);
-  //       if (receipt) {
-  //         console.log(
-  //           `- Status: ${receipt.status === 1 ? "Success" : "Failed"}`
-  //         );
-  //       }
-  //     }
-
-  //     return placeBidTxs.length;
-  //   } catch (error) {
-  //     console.error("Error:", error);
-  //     throw error;
-  //   }
-  // }
+  const cacheData = [
+    { name: "Gas Saved", value: gasUsage.saved },
+    { name: "Gas Used With Cache", value: gasUsage.withCache },
+  ];
 
   return (
     <div className="p-6 space-y-8 bg-gray-100 min-h-screen pl-[4rem] pr-[3rem]">
@@ -519,17 +484,12 @@ const CacheManagerPage = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Cache Usage Pie Chart */}
         <div className="bg-white p-6 rounded-xl shadow-lg">
-          <h2 className="text-xl font-semibold mb-4">
-            Cache Usage Distribution
-          </h2>
+          <h2 className="text-xl font-semibold mb-4">Cache Savings</h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={[
-                    { name: "Used", value: cacheData.used },
-                    { name: "Available", value: cacheData.available },
-                  ]}
+                  data={cacheData}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -537,14 +497,90 @@ const CacheManagerPage = () => {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {COLORS.map((color, index) => (
-                    <Cell key={`cell-${index}`} fill={color} />
+                  {cacheData.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={COLORS[index % COLORS.length]}
+                    />
                   ))}
                 </Pie>
                 <Tooltip />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+            <div className="bg-gray-50 p-4 rounded-lg transition-all hover:shadow-md">
+              <div className="flex items-center space-x-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-6 w-6 text-red-500"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <h3 className="text-gray-600 font-medium">Without Cache</h3>
+              </div>
+              <p className="text-2xl font-bold mt-2">
+                {gasUsage.withoutCache.toString()}
+              </p>
+              <p className="text-sm text-gray-500 mt-1">Gas Units</p>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg transition-all hover:shadow-md">
+              <div className="flex items-center space-x-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-6 w-6 text-green-500"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
+                </svg>
+                <h3 className="text-gray-600 font-medium">With Cache</h3>
+              </div>
+              <p className="text-2xl font-bold mt-2">
+                {gasUsage.withCache.toString()}
+              </p>
+              <p className="text-sm text-gray-500 mt-1">Gas Units</p>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg transition-all hover:shadow-md">
+              <div className="flex items-center space-x-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-6 w-6 text-blue-500"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <h3 className="text-gray-600 font-medium">Gas Saved</h3>
+              </div>
+              <p className="text-2xl font-bold mt-2 text-green-600">
+                {gasUsage.saved.toString()}
+              </p>
+              <p className="text-sm text-gray-500 mt-1">Gas Units</p>
+            </div>
           </div>
         </div>
 
