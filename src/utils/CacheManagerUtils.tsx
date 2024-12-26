@@ -1,6 +1,5 @@
 import { ethers, BrowserProvider } from "ethers";
 import { cacheManagerConfig } from "@/config/CacheManagerConfig";
-import abiOfPrecompile from "../libs/ArbWasmPrecompile.json";
 
 declare global {
   interface Window {
@@ -35,30 +34,6 @@ export const getContract = async () => {
   const contract = new ethers.Contract(
     cacheManagerConfig.arbitrum_one.contracts.cacheManager.address,
     cacheManagerConfig.arbitrum_one.contracts.cacheManager.abi,
-    signer
-  );
-  console.log("contract::", contract);
-  return contract;
-};
-
-export const getPrecompiledProvider = async () => {
-  try {
-    const provider = new ethers.JsonRpcProvider("https://arb1.arbitrum.io/rpc");
-    return provider;
-  } catch (error) {
-    console.error("Failed to connect to the Arbitrum RPC node:", error);
-    throw new Error("Unable to establish a connection to the Arbitrum RPC node");
-  }
-};
-
-export const getPrecompiledContract = async () => {
-  console.log("inside get contract");
-
-  const provider = await getProvider();
-  const signer = await provider.getSigner();
-  const contract = new ethers.Contract(
-    '0x0000000000000000000000000000000000000071',
-    abiOfPrecompile,
     signer
   );
   console.log("contract::", contract);

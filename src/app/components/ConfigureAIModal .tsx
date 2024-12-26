@@ -3,6 +3,7 @@ import {
   Brain,
   Settings,
   Loader,
+  Check
 } from "lucide-react";
 import { BrowserProvider, parseEther } from "ethers";
 import { toast, Toaster } from "react-hot-toast";
@@ -190,7 +191,7 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
 
         {/* Form */}
         <div className="space-y-4">
-          <div className="space-y-2">
+          <div className="space-y-2 relative">
             <label className="block text-sm font-medium text-gray-700">
               Contract Address
             </label>

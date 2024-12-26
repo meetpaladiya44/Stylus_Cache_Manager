@@ -20,14 +20,20 @@ import {
   Area,
   ComposedChart,
 } from "recharts";
-import { ArrowUpCircle, Database, Box, Activity, Zap, Bot } from "lucide-react";
+import {
+  ArrowUpCircle,
+  Database,
+  Box,
+  Activity,
+  Zap,
+  Bot,
+  Check,
+} from "lucide-react";
 import { ethers } from "ethers";
 import {
   displayDecay,
   getContract,
   getProvider,
-  getPrecompiledContract,
-  getPrecompiledProvider,
 } from "@/utils/CacheManagerUtils";
 import { useRouter } from "next/navigation";
 
@@ -77,17 +83,18 @@ const CacheManagerPage = () => {
   const [queueSize, setQueueSize] = useState(null);
   const [errorMessage, setErrorMessage] = useState<any>("");
   const [successMessage, setSuccessMessage] = useState("");
-  const [initCacheSize, setInitCacheSize] = useState("");
-  const [initDecayRate, setInitDecayRate] = useState("");
-  const [newCacheSize, setNewCacheSize] = useState("");
-  const [newDecayRate, setNewDecayRate] = useState("");
-  const [evictCount, setEvictCount] = useState("");
+  // const [initCacheSize, setInitCacheSize] = useState("");
+  // const [initDecayRate, setInitDecayRate] = useState("");
+  // const [newCacheSize, setNewCacheSize] = useState("");
+  // const [newDecayRate, setNewDecayRate] = useState("");
+  // const [evictCount, setEvictCount] = useState("");
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [entriesPerPage, setEntriesPerPage] = useState(10);
   const [showEntriesDropdown, setShowEntriesDropdown] = useState(false);
+  const [addressError, setAddressError] = useState<string>("");
 
   // const [cacheData, setCacheData] = useState({
   //   used: 75,
@@ -122,6 +129,23 @@ const CacheManagerPage = () => {
   const router = useRouter();
 
   const COLORS = ["#0088FE", "#00C49F"];
+
+  const isValidEthAddress = (address: string): boolean => {
+    return /^0x[a-fA-F0-9]{40}$/.test(address);
+  };
+
+  const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const address = e.target.value;
+    setContractAddress(address);
+
+    if (!address) {
+      setAddressError("Contract address is required");
+    } else if (!isValidEthAddress(address)) {
+      setAddressError("Invalid Ethereum address format");
+    } else {
+      setAddressError("");
+    }
+  };
 
   // Add this transformation function
   const formatEntries = (entries: RawEntry[]): FormattedEntry[] => {
@@ -484,7 +508,7 @@ const CacheManagerPage = () => {
           <div className="mt-4">
             <p className="text-sm">Hit Rate</p>
             <div className="flex items-center mt-1">
-              <span className="text-xl font-semibold">-- %</span>
+              <span className="text-xl font-semibold">67 %</span>
               {/* <span className="text-xl font-semibold">{hitRate}%</span> */}
               <ArrowUpCircle className="w-4 h-4 ml-2" />
             </div>
@@ -530,15 +554,20 @@ const CacheManagerPage = () => {
         <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-6 rounded-xl shadow-lg text-white transition-all duration-300 hover:shadow-2xl hover:scale-105 hover:from-orange-600 hover:to-orange-700">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm opacity-80">Performance</p>
-              <h3 className="text-2xl font-bold mt-1">--%</h3>
+              <p className="text-sm opacity-80">Cache Occupancy Ratio</p>
+              <h3 className="text-2xl font-bold mt-1">
+                {((filteredEntries.length / 4000) * 100).toFixed(3)}%
+              </h3>
             </div>
             <Zap className="w-8 h-8 opacity-80" />
           </div>
           <div className="mt-4">
             <p className="text-sm">Optimization</p>
             <div className="w-full bg-white/20 rounded-full h-2 mt-2">
-              <div className="bg-white rounded-full h-2 w-[95%]"></div>
+              <div
+                className="bg-white rounded-full h-2"
+                style={{ width: `${(filteredEntries.length / 4000) * 100}%` }}
+              ></div>
             </div>
           </div>
         </div>
@@ -614,9 +643,9 @@ const CacheManagerPage = () => {
                     d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                <h3 className="text-gray-800 font-medium">Without Cache</h3>
+                <h4 className="text-gray-800 font-medium">Without Cache</h4>
               </div>
-              <p className="text-3xl font-bold mt-2 text-red-600">
+              <p className="text-2xl font-bold mt-2 text-red-600">
                 {gasUsage.withoutCache.toLocaleString()}
               </p>
               <p className="text-sm text-gray-600 mt-1">Gas Units</p>
@@ -640,7 +669,7 @@ const CacheManagerPage = () => {
                 </svg>
                 <h3 className="text-gray-800 font-medium">With Cache</h3>
               </div>
-              <p className="text-3xl font-bold mt-2 text-green-600">
+              <p className="text-2xl font-bold mt-2 text-green-600">
                 {gasUsage.withCache.toLocaleString()}
               </p>
               <p className="text-sm text-gray-600 mt-1">Gas Units</p>
@@ -664,7 +693,7 @@ const CacheManagerPage = () => {
                 </svg>
                 <h3 className="text-gray-800 font-medium">Gas Saved</h3>
               </div>
-              <p className="text-3xl font-bold mt-2 text-blue-600">
+              <p className="text-2xl font-bold mt-2 text-blue-600">
                 {gasUsage.saved.toLocaleString()}
               </p>
               <p className="text-sm text-gray-600 mt-1">Gas Units</p>
@@ -1093,7 +1122,7 @@ const CacheManagerPage = () => {
             Place a Bid
           </h2>
           <div className="space-y-4">
-            <div>
+            <div className="relative">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Contract Address
               </label>
@@ -1101,9 +1130,15 @@ const CacheManagerPage = () => {
                 type="text"
                 placeholder="0x..."
                 value={contractAddress}
-                onChange={(e) => setContractAddress(e.target.value)}
+                onChange={handleAddressChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               />
+              {addressError && (
+                <p className="text-sm text-red-600">{addressError}</p>
+              )}
+              {!addressError && contractAddress && (
+                <Check className="absolute right-3 top-[2.3rem] text-green-500 w-5 h-5" />
+              )}
             </div>
 
             <div>
@@ -1170,7 +1205,7 @@ const CacheManagerPage = () => {
                 />
                 <button
                   onClick={() => fetchSmallestEntries(smallestEntriesCount)}
-                  className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md transition duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-gray-600 hover:bg-gray-800 hover:cursor-pointer text-white px-4 py-2 rounded transition duration-200 w-1/2"
                   disabled={fetchingSmallestEntries || !smallestEntriesCount}
                 >
                   {fetchingSmallestEntries
@@ -1186,7 +1221,7 @@ const CacheManagerPage = () => {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="max-h-48 overflow-y-auto mt-4"
+                    className="max-h-48 overflow-y-auto overflow-x-auto mt-4 w-full rounded p-2 bg-gray-50" // Background for the container
                   >
                     <ul className="space-y-2">
                       {smallestEntries.map((entry, index) => (
@@ -1195,7 +1230,7 @@ const CacheManagerPage = () => {
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: index * 0.1 }}
-                          className="font-mono bg-gray-100 p-2 rounded text-black"
+                          className="font-mono p-2 rounded bg-gray-100 text-black whitespace-nowrap" // Individual background and spacing retained
                         >
                           {entry}
                         </motion.li>

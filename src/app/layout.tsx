@@ -8,7 +8,7 @@ import Navbar from "./components/Navbar";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "StylusApp",
+  title: "Cache Manager GUI",
   description: "Cache Manager Data Fetching App",
 };
 
