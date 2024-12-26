@@ -935,7 +935,7 @@ const CacheManagerPage = () => {
               <ChevronDown className="ml-2 h-4 w-4" />
             </button>
             {showEntriesDropdown && (
-              <div className="origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5">
+              <div className="origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-10">
                 <div
                   className="py-1"
                   role="menu"
@@ -969,16 +969,16 @@ const CacheManagerPage = () => {
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                 >
                   <button
-                    onClick={() => handleSort("codeHash")}
+                    // onClick={() => handleSort("codeHash")}
                     className="font-semibold text-xs uppercase tracking-wider flex items-center"
                   >
                     Code Hash
-                    {sortColumn === "codeHash" &&
+                    {/* {sortColumn === "codeHash" &&
                       (sortDirection === "asc" ? (
                         <ChevronUp className="ml-2 h-4 w-4" />
                       ) : (
                         <ChevronDown className="ml-2 h-4 w-4" />
-                      ))}
+                      ))} */}
                   </button>
                 </th>
                 <th
