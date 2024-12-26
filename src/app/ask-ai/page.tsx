@@ -9,13 +9,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  AreaChart,
-  Area,
   RadarChart,
   Radar,
   PolarGrid,
@@ -32,10 +25,7 @@ import {
   Shield,
   Activity,
   Database,
-  Zap,
   Lock,
-  TrendingDown,
-  BarChart2,
   PieChart as PieChartIcon,
 } from "lucide-react";
 import ConfigureAIModal from "../components/ConfigureAIModal ";
@@ -81,20 +71,6 @@ const AIAgentDashboard = () => {
     evictionThreshold: 0.3,
     userStake: 1.5,
   });
-
-  const [stakingData] = useState([
-    { name: "User Stake", value: 1.5 },
-    { name: "Current Bid", value: 0.22 },
-    { name: "Min Required", value: 0.15 },
-  ]);
-
-  const [modelPerformance] = useState([
-    { metric: "Accuracy", value: 94 },
-    { metric: "Precision", value: 92 },
-    { metric: "Recall", value: 96 },
-    { metric: "F1 Score", value: 93 },
-    { metric: "AUC-ROC", value: 95 },
-  ]);
 
   const [evictionRiskFactors] = useState([
     { factor: "Time Pressure", score: 65 },
@@ -145,10 +121,7 @@ const AIAgentDashboard = () => {
     setHistoricalData(newData.historicalData);
     setModelMetrics(newData.modelMetrics);
     setAiMetrics(newData.aiMetrics);
-    setDecayData(newData.decayData);
   };
-
-  const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042"];
 
   return (
     <div className="p-4 md:p-6 space-y-6 bg-gray-50 min-h-screen">

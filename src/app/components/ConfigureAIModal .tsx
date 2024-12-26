@@ -1,12 +1,13 @@
-// ConfigureAIModal.tsx
 import React, { useState } from "react";
 import {
   Brain,
   Settings,
   Loader,
-  AlertCircle,
-  CheckCircle2,
 } from "lucide-react";
+import { BrowserProvider, parseEther } from "ethers";
+import { toast, Toaster } from "react-hot-toast";
+
+import { DashboardData } from "../../../types";
 
 interface ConfigureAIModalProps {
   isOpen: boolean;
@@ -14,38 +15,6 @@ interface ConfigureAIModalProps {
   onUpdateData: (data: DashboardData) => void;
 }
 
-interface DashboardData {
-  riskMetrics: {
-    currentRisk: number;
-    optimalBid: number;
-    timeToEviction: string;
-    budgetUtilization: number;
-  };
-  historicalData: Array<{
-    timestamp: string;
-    risk: number;
-    bid: number;
-    threshold: number;
-  }>;
-  modelMetrics: {
-    accuracy: number;
-    precision: number;
-    recall: number;
-    f1Score: number;
-  };
-  aiMetrics: {
-    bidDifference: number;
-    timePressure: number;
-    stakeToBidRatio: number;
-    predictionAccuracy: number;
-    lastOptimization: string;
-  };
-  decayData: Array<{
-    time: string;
-    decayRate: number;
-    predictedDecay: number;
-  }>;
-}
 
 const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
   isOpen,
@@ -76,59 +45,106 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
     }
   };
 
-  const handleConfigure = () => {
+  const updateMetricsData = (bidAmount: number) => {
+    const newData = calculateNewMetrics(bidAmount);
+    onUpdateData(newData);
+  };
+
+  const handleConfigure = async () => {
     setIsLoading(true);
-    const bidAmount = parseFloat(monthlyBid);
+    let shouldUpdateData = false;
 
-    const calculateNewMetrics = (): DashboardData => {
-        // More dynamic risk factor calculation
-        const riskFactor = bidAmount >= 1.0 ? 0.15 : bidAmount >= 0.5 ? 0.45 : 0.75;
-        const utilizationFactor = Math.min(95, bidAmount * 100);
-
-        const baseDecayRate = bidAmount >= 1.0 ? 0.15 : bidAmount >= 0.5 ? 0.25 : 0.35;
+    try {
+      // Request account access
+      await window.ethereum.request({ method: "eth_requestAccounts" });
       
-        return {
-          riskMetrics: {
-            currentRisk: riskFactor,
-            optimalBid: bidAmount * (1 + Math.random() * 0.2),
-            timeToEviction: bidAmount >= 1.0 ? "8h 30m" : bidAmount >= 0.5 ? "4h 15m" : "2h 00m",
-            budgetUtilization: utilizationFactor,
-          },
-          historicalData: Array(5).fill(null).map((_, i) => ({
-            timestamp: `${12 + i}:00`,
-            risk: Math.max(0.1, Math.min(0.9, riskFactor + (Math.random() * 0.3 - 0.15))),
-            bid: bidAmount * (0.7 + Math.random() * 0.6),
-            threshold: bidAmount * (1.2 + Math.random() * 0.3),
-          })),
-          modelMetrics: {
-            accuracy: Math.min(98, 85 + (bidAmount * 10)),
-            precision: Math.min(97, 82 + (bidAmount * 12)),
-            recall: Math.min(98, 84 + (bidAmount * 11)),
-            f1Score: Math.min(97, 83 + (bidAmount * 11)),
-          },
-          aiMetrics: {
-            bidDifference: bidAmount * (0.1 + Math.random() * 0.1),
-            timePressure: riskFactor + Math.random() * 0.1,
-            stakeToBidRatio: bidAmount * (2 + Math.random()),
-            predictionAccuracy: Math.min(98, 90 + (bidAmount * 5)),
-            lastOptimization: "Just now",
-          },
-          decayData: Array(8).fill(null).map((_, i) => ({
-            time: `${i * 3}h`,
-            decayRate: baseDecayRate * (1 + Math.random() * 0.3) * (1 + i * 0.1),
-            predictedDecay: baseDecayRate * (1 + i * 0.15)
-          }))
-        };
-      };
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      
+      // Send transaction
+      const tx = await signer.sendTransaction({
+        to: contractAddress,
+        value: parseEther(monthlyBid),
+        gasLimit: 100000,
+      });
 
-    setTimeout(() => {
-      const newData = calculateNewMetrics();
-      onUpdateData(newData);
+      // Transaction was initiated by user (not rejected)
+      shouldUpdateData = true;
+      
+      // Wait for transaction confirmation
+      await tx.wait();
+      toast.success("Transaction successful!");
+      
+    } catch (error: any) {
+      // Only show error toast if user rejected transaction
+      if (error.code === 4001 || error.message.includes("user rejected")) {
+        toast.error("Transaction cancelled by user");
+        shouldUpdateData = false;
+      } else {
+        // For other errors, still update the data
+        shouldUpdateData = true;
+      }
+    } finally {
+      if (shouldUpdateData) {
+        // Update metrics with the new bid amount
+        const newData = calculateNewMetrics(parseFloat(monthlyBid));
+        onUpdateData(newData);
+        
+        // Reset form and close modal
+        setContractAddress("");
+        setMonthlyBid("");
+        onClose();
+      }
       setIsLoading(false);
-      onClose();
-      setContractAddress("");
-      setMonthlyBid("");
-    }, 1500);
+    }
+  };
+
+  const calculateNewMetrics = (bidAmount: number): DashboardData => {
+    // Calculate risk factor based on bid amount
+    const riskFactor = bidAmount >= 1.0 ? 0.15 : bidAmount >= 0.5 ? 0.45 : 0.75;
+    const utilizationFactor = Math.min(95, bidAmount * 100);
+
+    // Generate timestamps for historical data
+    const now = new Date();
+    const timestamps = Array(5).fill(null).map((_, i) => {
+      const date = new Date(now.getTime() - i * 3600000); // Go back i hours
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }).reverse();
+
+    return {
+      riskMetrics: {
+        currentRisk: riskFactor,
+        optimalBid: bidAmount * (1 + Math.random() * 0.2),
+        timeToEviction:
+          bidAmount >= 1.0 ? "8h 30m" : bidAmount >= 0.5 ? "4h 15m" : "2h 00m",
+        budgetUtilization: utilizationFactor,
+      },
+      historicalData: timestamps.map((timestamp, i) => ({
+        timestamp,
+        risk: Math.max(
+          0.1,
+          Math.min(0.9, riskFactor + (Math.random() * 0.3 - 0.15))
+        ),
+        bid: bidAmount * (0.7 + Math.random() * 0.6),
+        threshold: bidAmount * (1.2 + Math.random() * 0.3),
+      })),
+      modelMetrics: {
+        accuracy: Math.min(98, 85 + bidAmount * 10),
+        precision: Math.min(97, 82 + bidAmount * 12),
+        recall: Math.min(98, 84 + bidAmount * 11),
+        f1Score: Math.min(97, 83 + bidAmount * 11),
+      },
+      aiMetrics: {
+        bidDifference: bidAmount * (0.1 + Math.random() * 0.1),
+        timePressure: riskFactor + Math.random() * 0.1,
+        stakeToBidRatio: bidAmount * (2 + Math.random()),
+        predictionAccuracy: Math.min(98, 90 + bidAmount * 5),
+        lastOptimization: new Date().toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+      },
+    };
   };
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -142,6 +158,7 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
       className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
       onClick={handleBackdropClick}
     >
+      <Toaster position="top-center" reverseOrder={false} />
       <div className="bg-white rounded-xl p-6 w-full max-w-md m-4 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between border-b pb-4">
@@ -177,40 +194,23 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
             <label className="block text-sm font-medium text-gray-700">
               Contract Address
             </label>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="0x..."
-                value={contractAddress}
-                onChange={handleAddressChange}
-                className={`w-full px-3 py-2 pr-10 border rounded-lg focus:outline-none focus:ring-2 transition-all ${
-                  addressError
-                    ? "border-red-300 focus:ring-red-500"
-                    : contractAddress && !addressError
-                    ? "border-green-300 focus:ring-green-500"
-                    : "border-gray-300 focus:ring-blue-500"
-                }`}
-              />
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                {contractAddress &&
-                  (addressError ? (
-                    <AlertCircle className="h-5 w-5 text-red-500" />
-                  ) : (
-                    <CheckCircle2 className="h-5 w-5 text-green-500" />
-                  ))}
-              </div>
-            </div>
+            <input
+              type="text"
+              placeholder="0x..."
+              value={contractAddress}
+              onChange={handleAddressChange}
+              className={`w-full px-3 py-2 border ${
+                addressError ? "border-red-300" : "border-gray-300"
+              } rounded-lg focus:outline-none focus:ring-2 transition-all`}
+            />
             {addressError && (
-              <p className="text-sm text-red-600 flex items-center gap-1 mt-1">
-                <AlertCircle className="h-4 w-4" />
-                {addressError}
-              </p>
+              <p className="text-sm text-red-600">{addressError}</p>
             )}
           </div>
 
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">
-              Monthly Bid (ETH)
+              Monthly Bid Budget (in ETH)
             </label>
             <input
               type="number"
@@ -218,7 +218,7 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
               placeholder="0.5"
               value={monthlyBid}
               onChange={(e) => setMonthlyBid(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -230,7 +230,7 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
             disabled={
               !contractAddress || !!addressError || !monthlyBid || isLoading
             }
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? (
               <Loader className="w-5 h-5 animate-spin" />

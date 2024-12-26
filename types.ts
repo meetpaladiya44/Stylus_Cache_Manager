@@ -24,9 +24,4 @@ export interface DashboardData {
     predictionAccuracy: number;
     lastOptimization: string;
   };
-  decayData: Array<{
-    time: string;
-    decayRate: number;
-    predictedDecay: number;
-  }>;
 }
