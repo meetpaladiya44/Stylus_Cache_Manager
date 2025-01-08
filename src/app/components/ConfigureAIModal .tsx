@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Brain, Settings, Loader, Check } from "lucide-react";
-import { BrowserProvider, parseEther } from "ethers";
+import { BrowserProvider, parseEther, Contract } from "ethers";
 import { toast, Toaster } from "react-hot-toast";
 
 import { DashboardData } from "../../../types";
@@ -10,6 +10,17 @@ interface ConfigureAIModalProps {
   onClose: () => void;
   onUpdateData: (data: DashboardData) => void;
 }
+
+const VAULT_CONTRACT_ADDRESS = "0x191a2B9ED5bEf07f693BB4898bed37106439104E";
+const VAULT_ABI = [
+  {
+    inputs: [],
+    name: "deposit",
+    outputs: [],
+    stateMutability: "payable",
+    type: "function",
+  },
+];
 
 const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
   isOpen,
@@ -52,15 +63,28 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
       const walletAddress = await signer.getAddress();
 
       // Send transaction
-      const tx = await signer.sendTransaction({
-        to: contractAddress,
+       // Create contract instance for the ConfigVault
+       const vaultContract = new Contract(
+        VAULT_CONTRACT_ADDRESS,
+        VAULT_ABI,
+        signer
+      );
+
+      // First, deposit the bid amount to the ConfigVault
+      const depositTx = await vaultContract.deposit({
         value: parseEther(monthlyBid),
         gasLimit: 100000,
       });
 
+      // Wait for deposit confirmation
+      await depositTx.wait();
+      toast.success("Deposit successful!");
+
+      // Store the user's contract address (you can use this for your application's logic)
+      console.log("User's contract address:", contractAddress);
+      // Add any additional logic needed for the user's contract address here
+
       shouldUpdateData = true;
-      await tx.wait();
-      toast.success("Transaction successful!");
 
       if (shouldUpdateData) {
         // Call API with wallet address
