@@ -51,11 +51,6 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
     }
   };
 
-  const updateMetricsData = (bidAmount: number) => {
-    const newData = calculateNewMetrics(bidAmount);
-    onUpdateData(newData);
-  };
-
   const handleConfigure = async () => {
     setIsLoading(true);
     let shouldUpdateData = false;
@@ -102,9 +97,23 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
       }
     } finally {
       if (shouldUpdateData) {
-        // Update metrics with the new bid amount
-        const newData = calculateNewMetrics(parseFloat(monthlyBid));
-        onUpdateData(newData);
+        // Call external calculation API
+        const apiKey = process.env.NEXT_PUBLIC_CALCULATION_API_KEY;
+        const response = await fetch("http://localhost:4000/calculate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(apiKey && { "x-api-key": apiKey }), // Only include x-api-key if it exists
+          },
+          body: JSON.stringify({ bidAmount: parseFloat(monthlyBid) }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch AI metrics");
+        }
+
+        const metrics = await response.json();
+        onUpdateData(metrics);
 
         // Reset form and close modal
         setContractAddress("");

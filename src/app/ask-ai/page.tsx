@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   LineChart,
   Line,
@@ -29,99 +29,77 @@ import {
   PieChart as PieChartIcon,
 } from "lucide-react";
 import ConfigureAIModal from "../components/ConfigureAIModal ";
+
 import { DashboardData } from "../../../types";
 
+type FullDashboardData = DashboardData & {
+  recentPredictions: Array<{
+    timestamp: string;
+    prediction: string;
+    confidence: number;
+    action: string;
+  }>;
+  decayData: Array<{
+    time: string;
+    decayRate: number;
+    predictedDecay: number;
+  }>;
+  contractParams: {
+    minBid: number;
+    timeLeft: string;
+    currentBid: number;
+    evictionThreshold: number;
+    userStake: number;
+  };
+  evictionRiskFactors: Array<{
+    factor: string;
+    score: number;
+  }>;
+}
+
 const AIAgentDashboard = () => {
-  const [recentPredictions] = useState([
-    {
-      timestamp: "15:45",
-      prediction: "Low Risk",
-      confidence: 0.85,
-      action: "No Action",
-    },
-    {
-      timestamp: "15:30",
-      prediction: "Medium Risk",
-      confidence: 0.75,
-      action: "Increased Bid",
-    },
-    {
-      timestamp: "15:15",
-      prediction: "High Risk",
-      confidence: 0.92,
-      action: "Emergency Bid",
-    },
-  ]);
+  const [dashboardData, setDashboardData] = useState<FullDashboardData | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const [decayData, setDecayData] = useState([
-    { time: "0h", decayRate: 0.15, predictedDecay: 0.15 },
-    { time: "3h", decayRate: 0.18, predictedDecay: 0.17 },
-    { time: "6h", decayRate: 0.22, predictedDecay: 0.2 },
-    { time: "9h", decayRate: 0.25, predictedDecay: 0.23 },
-    { time: "12h", decayRate: 0.29, predictedDecay: 0.26 },
-    { time: "15h", decayRate: 0.32, predictedDecay: 0.3 },
-    { time: "18h", decayRate: 0.36, predictedDecay: 0.34 },
-    { time: "21h", decayRate: 0.4, predictedDecay: 0.38 },
-  ]);
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const apiKey = process.env.NEXT_PUBLIC_CALCULATION_API_KEY;
+        const response = await fetch("http://localhost:4000/dashboard-data", {
+          headers: {  
+            "Content-Type": "application/json",
+            ...(apiKey && { "x-api-key": apiKey }),
+          },
+        });
+        if (!response.ok) throw new Error('Failed to fetch dashboard data');
+        const data: FullDashboardData = await response.json();
+        setDashboardData(data);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      }
+    };
 
-  const [contractParams] = useState({
-    minBid: 0.15,
-    timeLeft: "2h 15m",
-    currentBid: 0.22,
-    evictionThreshold: 0.3,
-    userStake: 1.5,
-  });
-
-  const [evictionRiskFactors] = useState([
-    { factor: "Time Pressure", score: 65 },
-    { factor: "Bid Competition", score: 78 },
-    { factor: "Market Volatility", score: 45 },
-    { factor: "Historical Stability", score: 82 },
-    { factor: "Network Load", score: 58 },
-  ]);
-
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-
-  const [riskMetrics, setRiskMetrics] = useState<DashboardData["riskMetrics"]>({
-    currentRisk: 0.35,
-    optimalBid: 0.25,
-    timeToEviction: "2h 15m",
-    budgetUtilization: 65,
-  });
-
-  const [historicalData, setHistoricalData] = useState<
-    DashboardData["historicalData"]
-  >([
-    { timestamp: "12:00", risk: 0.3, bid: 0.15, threshold: 0.4 },
-    { timestamp: "13:00", risk: 0.25, bid: 0.38, threshold: 0.5 },
-    { timestamp: "14:00", risk: 0.15, bid: 0.25, threshold: 0.4 },
-    { timestamp: "15:00", risk: 0.28, bid: 0.42, threshold: 0.325 },
-    { timestamp: "16:00", risk: 0.42, bid: 0.24, threshold: 0.309 },
-  ]);
-
-  const [modelMetrics, setModelMetrics] = useState<
-    DashboardData["modelMetrics"]
-  >({
-    accuracy: 92,
-    precision: 89,
-    recall: 94,
-    f1Score: 91,
-  });
-
-  const [aiMetrics, setAiMetrics] = useState<DashboardData["aiMetrics"]>({
-    bidDifference: 0.08,
-    timePressure: 0.45,
-    stakeToBidRatio: 6.82,
-    predictionAccuracy: 94.5,
-    lastOptimization: "5 minutes ago",
-  });
+    fetchDashboardData();
+  }, []);
 
   const handleDataUpdate = (newData: DashboardData) => {
-    setRiskMetrics(newData.riskMetrics);
-    setHistoricalData(newData.historicalData);
-    setModelMetrics(newData.modelMetrics);
-    setAiMetrics(newData.aiMetrics);
+    if (dashboardData) {
+      setDashboardData(prev => prev ? ({...prev, ...newData}) : null);
+    }
   };
+
+  if (!dashboardData) return <div>Loading...</div>;
+  
+  const {
+    recentPredictions,
+    decayData,
+    contractParams,
+    evictionRiskFactors,
+    riskMetrics,
+    historicalData,
+    modelMetrics,
+    aiMetrics
+  } = dashboardData;
 
   return (
     <div className="p-4 md:p-6 space-y-6 bg-gray-50 min-h-screen">
@@ -194,7 +172,7 @@ const AIAgentDashboard = () => {
             <div>
               <p className="text-sm opacity-80">Budget Utilization</p>
               <h3 className="text-2xl font-bold mt-1">
-                {riskMetrics.budgetUtilization}%
+                {riskMetrics.budgetUtilization.toFixed(3)}%
               </h3>
             </div>
             <TrendingUp className="w-8 h-8 opacity-80" />
@@ -215,7 +193,7 @@ const AIAgentDashboard = () => {
             <div>
               <p className="text-sm opacity-80">AI Confidence</p>
               <h3 className="text-2xl font-bold mt-1">
-                {aiMetrics.predictionAccuracy}%
+                {aiMetrics.predictionAccuracy.toFixed(3)}%
               </h3>
             </div>
             <Brain className="w-8 h-8 opacity-80" />
@@ -263,34 +241,6 @@ const AIAgentDashboard = () => {
             </ResponsiveContainer>
           </div>
         </div>
-
-        {/* <div className="bg-white p-6 rounded-xl shadow-lg">
-          <h2 className="text-xl font-semibold mb-4">
-            Model Performance Metrics
-          </h2>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={[
-                  { name: "Accuracy", value: modelMetrics.accuracy },
-                  { name: "Precision", value: modelMetrics.precision },
-                  { name: "Recall", value: modelMetrics.recall },
-                  { name: "F1 Score", value: modelMetrics.f1Score },
-                ]}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="value" fill="#6366f1">
-                  {COLORS.map((color, index) => (
-                    <Cell key={`cell-${index}`} fill={color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div> */}
 
         <div className="bg-white p-6 rounded-xl shadow-lg">
           <h2 className="text-xl font-semibold mb-4">Decay Rate Analysis</h2>
