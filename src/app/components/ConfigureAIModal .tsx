@@ -1,11 +1,6 @@
 import React, { useState } from "react";
-import {
-  Brain,
-  Settings,
-  Loader,
-  Check
-} from "lucide-react";
-import { BrowserProvider, parseEther } from "ethers";
+import { Brain, Settings, Loader, Check } from "lucide-react";
+import { BrowserProvider, Contract, parseEther } from "ethers";
 import { toast, Toaster } from "react-hot-toast";
 
 import { DashboardData } from "../../../types";
@@ -16,6 +11,16 @@ interface ConfigureAIModalProps {
   onUpdateData: (data: DashboardData) => void;
 }
 
+const VAULT_CONTRACT_ADDRESS = "0x191a2B9ED5bEf07f693BB4898bed37106439104E";
+const VAULT_ABI = [
+  {
+    inputs: [],
+    name: "deposit",
+    outputs: [],
+    stateMutability: "payable",
+    type: "function",
+  },
+];
 
 const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
   isOpen,
@@ -58,39 +63,49 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
     try {
       // Request account access
       await window.ethereum.request({ method: "eth_requestAccounts" });
-      
+
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      
-      // Send transaction
-      const tx = await signer.sendTransaction({
-        to: contractAddress,
+
+      // Create contract instance for the ConfigVault
+      const vaultContract = new Contract(
+        VAULT_CONTRACT_ADDRESS,
+        VAULT_ABI,
+        signer
+      );
+
+      // First, deposit the bid amount to the ConfigVault
+      const depositTx = await vaultContract.deposit({
         value: parseEther(monthlyBid),
         gasLimit: 100000,
       });
 
-      // Transaction was initiated by user (not rejected)
+      // Wait for deposit confirmation
+      await depositTx.wait();
+      toast.success("Deposit successful!");
+
+      // Store the user's contract address (you can use this for your application's logic)
+      console.log("User's contract address:", contractAddress);
+      // Add any additional logic needed for the user's contract address here
+
       shouldUpdateData = true;
-      
-      // Wait for transaction confirmation
-      await tx.wait();
-      toast.success("Transaction successful!");
-      
     } catch (error: any) {
-      // Only show error toast if user rejected transaction
+      console.error("Transaction error:", error);
       if (error.code === 4001 || error.message.includes("user rejected")) {
         toast.error("Transaction cancelled by user");
         shouldUpdateData = false;
       } else {
-        // For other errors, still update the data
-        shouldUpdateData = true;
+        toast.error(
+          "Transaction failed: " + (error.message || "Unknown error")
+        );
+        shouldUpdateData = false;
       }
     } finally {
       if (shouldUpdateData) {
         // Update metrics with the new bid amount
         const newData = calculateNewMetrics(parseFloat(monthlyBid));
         onUpdateData(newData);
-        
+
         // Reset form and close modal
         setContractAddress("");
         setMonthlyBid("");
@@ -107,10 +122,16 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
 
     // Generate timestamps for historical data
     const now = new Date();
-    const timestamps = Array(5).fill(null).map((_, i) => {
-      const date = new Date(now.getTime() - i * 3600000); // Go back i hours
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }).reverse();
+    const timestamps = Array(5)
+      .fill(null)
+      .map((_, i) => {
+        const date = new Date(now.getTime() - i * 3600000); // Go back i hours
+        return date.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      })
+      .reverse();
 
     return {
       riskMetrics: {
@@ -141,8 +162,8 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
         stakeToBidRatio: bidAmount * (2 + Math.random()),
         predictionAccuracy: Math.min(98, 90 + bidAmount * 5),
         lastOptimization: new Date().toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit'
+          hour: "2-digit",
+          minute: "2-digit",
         }),
       },
     };
