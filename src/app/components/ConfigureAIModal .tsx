@@ -45,11 +45,11 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
     let shouldUpdateData = false;
 
     try {
-      // Request account access
-      await window.ethereum.request({ method: "eth_requestAccounts" });
-
+      // Get wallet address
+      // await window.ethereum.request({ method: "eth_requestAccounts" });
       const provider = new BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
+      const walletAddress = await signer.getAddress();
 
       // Send transaction
       const tx = await signer.sendTransaction({
@@ -58,30 +58,17 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
         gasLimit: 100000,
       });
 
-      // Transaction was initiated by user (not rejected)
       shouldUpdateData = true;
-
-      // Wait for transaction confirmation
       await tx.wait();
       toast.success("Transaction successful!");
-    } catch (error: any) {
-      // Only show error toast if user rejected transaction
-      if (error.code === 4001 || error.message.includes("user rejected")) {
-        toast.error("Transaction cancelled by user");
-        shouldUpdateData = false;
-      } else {
-        // For other errors, still update the data
-        shouldUpdateData = true;
-      }
-    } finally {
+
       if (shouldUpdateData) {
-        // Call external calculation API
-        const apiKey = process.env.NEXT_PUBLIC_CALCULATION_API_KEY;
-        const response = await fetch("http://localhost:4000/calculate", {
+        // Call API with wallet address
+        const response = await fetch("/api/dashboard", {
           method: "POST",
-          headers: {  
+          headers: {
             "Content-Type": "application/json",
-            ...(apiKey && { "x-api-key": apiKey }), // Only include x-api-key if it exists
+            "x-wallet-address": walletAddress,
           },
           body: JSON.stringify({ bidAmount: parseFloat(monthlyBid) }),
         });
@@ -93,11 +80,15 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
         const metrics = await response.json();
         onUpdateData(metrics);
 
-        // Reset form and close modal
         setContractAddress("");
         setMonthlyBid("");
         onClose();
       }
+    } catch (error: any) {
+      if (error.code === 4001 || error.message.includes("user rejected")) {
+        toast.error("Transaction cancelled by user");
+      }
+    } finally {
       setIsLoading(false);
     }
   };

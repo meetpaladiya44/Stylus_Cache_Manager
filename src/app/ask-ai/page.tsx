@@ -31,6 +31,7 @@ import {
 import ConfigureAIModal from "../components/ConfigureAIModal ";
 
 import { DashboardData } from "../../../types";
+import { BrowserProvider } from "ethers";
 
 type FullDashboardData = DashboardData & {
   recentPredictions: Array<{
@@ -55,41 +56,54 @@ type FullDashboardData = DashboardData & {
     factor: string;
     score: number;
   }>;
-}
+};
 
 const AIAgentDashboard = () => {
-  const [dashboardData, setDashboardData] = useState<FullDashboardData | null>(null);
+  const [dashboardData, setDashboardData] = useState<FullDashboardData | null>(
+    null
+  );
   const [isModalOpen, setIsModalOpen] = useState(false);
+  // const [provider, setProvider] = useState<BrowserProvider | null>(null);
+  const provider = new BrowserProvider(window.ethereum);
+
+  const fetchDashboardData = async () => {
+    try {
+      // Get the current wallet address
+      console.log("before signer");
+      const signer = await provider.getSigner();
+      console.log("after signer");
+      const walletAddress = await signer.getAddress();
+      console.log("address", walletAddress);
+
+      const response = await fetch("/api/dashboard", {
+        headers: {  
+          "Content-Type": "application/json",
+          ...(walletAddress && { "x-wallet-address": walletAddress }),
+        },
+      });
+
+      console.log("response");
+
+      if (!response.ok) throw new Error("Failed to fetch dashboard data");
+      const data: FullDashboardData = await response.json();
+      setDashboardData(data);
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+    }
+  };
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        const apiKey = process.env.NEXT_PUBLIC_CALCULATION_API_KEY;
-        const response = await fetch("http://localhost:4000/dashboard-data", {
-          headers: {  
-            "Content-Type": "application/json",
-            ...(apiKey && { "x-api-key": apiKey }),
-          },
-        });
-        if (!response.ok) throw new Error('Failed to fetch dashboard data');
-        const data: FullDashboardData = await response.json();
-        setDashboardData(data);
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-      }
-    };
-
-    fetchDashboardData();
+      fetchDashboardData();
   }, []);
 
   const handleDataUpdate = (newData: DashboardData) => {
     if (dashboardData) {
-      setDashboardData(prev => prev ? ({...prev, ...newData}) : null);
+      setDashboardData((prev) => (prev ? { ...prev, ...newData } : null));
     }
   };
 
   if (!dashboardData) return <div>Loading...</div>;
-  
+
   const {
     recentPredictions,
     decayData,
@@ -98,7 +112,7 @@ const AIAgentDashboard = () => {
     riskMetrics,
     historicalData,
     modelMetrics,
-    aiMetrics
+    aiMetrics,
   } = dashboardData;
 
   return (
