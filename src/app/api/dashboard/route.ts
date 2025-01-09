@@ -28,9 +28,10 @@ export async function GET(req: NextRequest) {
     console.log("userData", userData);
     
     // If no user data exists, return default data
+    const key = process.env.NEXT_PUBLIC_CALCULATION_API_KEY;
     const response = await fetch(`${process.env.NEXT_PUBLIC_APIS_DATA_ENDPOINT}/dashboard-data`, {
       headers: {
-        'x-api-key': process.env.NEXT_PUBLIC_CALCULATION_API_KEY || '',
+        ...(key && { "x-api-key": key }),
       },
     });
     
