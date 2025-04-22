@@ -36,6 +36,7 @@ import {
   getProvider,
 } from "@/utils/CacheManagerUtils";
 import { useRouter } from "next/navigation";
+import ConfigureAIModal from "./ConfigureAIModal ";
 
 const fadeInDown = keyframes`
   from {
@@ -66,6 +67,33 @@ interface Props {
   firstEntryDate: string; // ISO date string
 }
 
+import { DashboardData } from "../../../types";
+
+type FullDashboardData = DashboardData & {
+  recentPredictions: Array<{
+    timestamp: string;
+    prediction: string;
+    confidence: number;
+    action: string;
+  }>;
+  decayData: Array<{
+    time: string;
+    decayRate: number;
+    predictedDecay: number;
+  }>;
+  contractParams: {
+    minBid: number;
+    timeLeft: string;
+    currentBid: number;
+    evictionThreshold: number;
+    userStake: number;
+  };
+  evictionRiskFactors: Array<{
+    factor: string;
+    score: number;
+  }>;
+};
+
 const CacheManagerPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [fetchingSmallestEntries, setFetchingSmallestEntries] = useState(false);
@@ -95,6 +123,10 @@ const CacheManagerPage = () => {
   const [entriesPerPage, setEntriesPerPage] = useState(10);
   const [showEntriesDropdown, setShowEntriesDropdown] = useState(false);
   const [addressError, setAddressError] = useState<string>("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [dashboardData, setDashboardData] = useState<FullDashboardData | null>(
+    null
+  );
 
   // const [cacheData, setCacheData] = useState({
   //   used: 75,
@@ -448,8 +480,14 @@ const CacheManagerPage = () => {
         ) / chartDataCacheSize.length
       : 0;
 
-  const handleAskAI = () => {
-    router.push("/ask-ai");
+  // const handleAskAI = () => {
+  //   router.push("/ask-ai");
+  // };
+
+  const handleDataUpdate = (newData: DashboardData) => {
+    if (dashboardData) {
+      setDashboardData((prev) => (prev ? { ...prev, ...newData } : null));
+    }
   };
 
   function calculateCacheSavings(): number {
@@ -1165,7 +1203,8 @@ const CacheManagerPage = () => {
               </button>
 
               <button
-                onClick={handleAskAI}
+                // onClick={handleAskAI}
+                onClick={() => setIsModalOpen(true)}
                 className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md transition duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center justify-center gap-2"
               >
                 <Bot className="w-5 h-5" />
@@ -1243,6 +1282,12 @@ const CacheManagerPage = () => {
           </div>
         </motion.div>
       </div>
+
+      <ConfigureAIModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onUpdateData={handleDataUpdate}
+      />
     </div>
   );
 };
