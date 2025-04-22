@@ -8,8 +8,8 @@ import Navbar from "./components/Navbar";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Cache Manager GUI",
-  description: "Cache Manager Data Fetching App",
+  title: "Smart Cache",
+  description: "Smart Cache App",
 };
 
 export default function RootLayout({

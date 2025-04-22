@@ -2,7 +2,7 @@
 import "../css/Landing.css";
 import { keyframes } from "@emotion/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, ChevronDown, ChevronUp, WalletMinimal } from "lucide-react";
 import React, { useState, useEffect, useMemo } from "react";
 import {
   PieChart,
@@ -480,9 +480,9 @@ const CacheManagerPage = () => {
         ) / chartDataCacheSize.length
       : 0;
 
-  // const handleAskAI = () => {
-  //   router.push("/ask-ai");
-  // };
+  const handleAskAI = () => {
+    router.push("/ask-ai");
+  };
 
   const handleDataUpdate = (newData: DashboardData) => {
     if (dashboardData) {
@@ -528,9 +528,18 @@ const CacheManagerPage = () => {
 
   return (
     <div className="p-6 space-y-8 bg-gray-100 min-h-screen pl-[4rem] pr-[3rem] bg-gradient-to-br from-gray-100 to-gray-200">
-      <h1 className="text-3xl font-bold text-gray-800 mb-8 animate-fade-in-down">
-        Cache Manager Analytics
-      </h1>
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold text-gray-800 animate-fade-in-down">
+          Cache Manager Analytics
+        </h1>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="bg-blue-500 rounded-xl hover:bg-blue-600 text-white px-4 py-2 transition duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center justify-center gap-2"
+        >
+          <WalletMinimal className="w-5 h-5" />
+          Add Balance
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-8">
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-xl shadow-lg text-white transition-all duration-300 hover:shadow-2xl hover:scale-105 hover:from-blue-600 hover:to-blue-700">
@@ -1203,8 +1212,7 @@ const CacheManagerPage = () => {
               </button>
 
               <button
-                // onClick={handleAskAI}
-                onClick={() => setIsModalOpen(true)}
+                onClick={handleAskAI}
                 className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md transition duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center justify-center gap-2"
               >
                 <Bot className="w-5 h-5" />

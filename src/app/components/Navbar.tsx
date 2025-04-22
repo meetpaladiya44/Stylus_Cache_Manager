@@ -2,7 +2,7 @@
 import React from "react";
 import Image from "next/image";
 // import Hero from "../assets/Stylus_Landing_bg.png";
-import Hero from "../assets/LOGO.svg";
+import Hero from "../assets/SmartCache_logo.svg";
 import Providers from "../Providers";
 import { ConnectKitButton } from "connectkit";
 import { useEffect, useState } from 'react'
