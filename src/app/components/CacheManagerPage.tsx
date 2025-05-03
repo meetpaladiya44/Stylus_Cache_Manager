@@ -37,6 +37,44 @@ import {
 } from "@/utils/CacheManagerUtils";
 import { useRouter } from "next/navigation";
 import ConfigureAIModal from "./ConfigureAIModal ";
+import { ConnectKitButton } from "connectkit";
+import Image from "next/image";
+
+// Add function to check if wallet is connected
+const useIsConnected = () => {
+  const [isConnected, setIsConnected] = useState(false);
+  
+  useEffect(() => {
+    const checkConnection = async () => {
+      if (typeof window !== 'undefined' && window.ethereum) {
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          setIsConnected(accounts.length > 0);
+          
+          // Listen for account changes
+          window.ethereum.on('accountsChanged', (accounts: string[]) => {
+            setIsConnected(accounts.length > 0);
+          });
+        } catch (error) {
+          console.error("Failed to check wallet connection:", error);
+          setIsConnected(false);
+        }
+      } else {
+        setIsConnected(false);
+      }
+    };
+    
+    checkConnection();
+    
+    return () => {
+      if (window.ethereum) {
+        window.ethereum.removeListener('accountsChanged', () => {});
+      }
+    };
+  }, []);
+  
+  return isConnected;
+};
 
 const fadeInDown = keyframes`
   from {
@@ -95,6 +133,10 @@ type FullDashboardData = DashboardData & {
 };
 
 const CacheManagerPage = () => {
+  // Check if wallet is connected - keep this at the top with other hooks
+  const isConnected = useIsConnected();
+  
+  // All state hooks must be called unconditionally
   const [isLoading, setIsLoading] = useState(false);
   const [fetchingSmallestEntries, setFetchingSmallestEntries] = useState(false);
   const [cacheSize, setCacheSize] = useState<string | null>(null);
@@ -111,11 +153,6 @@ const CacheManagerPage = () => {
   const [queueSize, setQueueSize] = useState(null);
   const [errorMessage, setErrorMessage] = useState<any>("");
   const [successMessage, setSuccessMessage] = useState("");
-  // const [initCacheSize, setInitCacheSize] = useState("");
-  // const [initDecayRate, setInitDecayRate] = useState("");
-  // const [newCacheSize, setNewCacheSize] = useState("");
-  // const [newDecayRate, setNewDecayRate] = useState("");
-  // const [evictCount, setEvictCount] = useState("");
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [searchTerm, setSearchTerm] = useState("");
@@ -127,11 +164,6 @@ const CacheManagerPage = () => {
   const [dashboardData, setDashboardData] = useState<FullDashboardData | null>(
     null
   );
-
-  // const [cacheData, setCacheData] = useState({
-  //   used: 75,
-  //   available: 25,
-  // });
 
   const [timeSeriesData, setTimeSeriesData] = useState([
     { timestamp: "00:00", cacheSize: 50, entries: 5, minBid: 0.1 },
@@ -161,9 +193,54 @@ const CacheManagerPage = () => {
   const router = useRouter();
 
   const COLORS = ["#0088FE", "#00C49F"];
-
+  
+  // Helper function for validating Ethereum addresses
   const isValidEthAddress = (address: string): boolean => {
     return /^0x[a-fA-F0-9]{40}$/.test(address);
+  };
+  
+  // Add this transformation function
+  const formatEntries = (entries: RawEntry[]): FormattedEntry[] => {
+    return entries.map((entry) => ({
+      codeHash: entry[0],
+      size: BigInt(entry[1]),
+      ethBid: entry[2],
+    }));
+  };
+
+  // All useEffect and other hooks must also be called unconditionally
+  // Initial data fetch
+  useEffect(() => {
+    // Only fetch data if the user is connected
+    if (isConnected) {
+      const initialize = async () => {
+        try {
+          await fetchEntries();
+          await fetchCacheSize();
+          await fetchDecay();
+          await fetchQueueSize();
+          await checkIsPaused();
+        } catch (error) {
+          console.error("Initialization error:", error);
+          setErrorMessage("Failed to initialize: " + error);
+        }
+      };
+
+      initialize();
+    }
+  }, [isConnected]); // Add isConnected as dependency
+
+  const fetchCacheSize = async () => {
+    try {
+      setIsLoading(true);
+      const contract = await getContract();
+      const size = await contract.cacheSize();
+      setCacheSize(size.toString());
+    } catch (error) {
+      setErrorMessage("Failed to fetch cache size: " + error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -176,48 +253,6 @@ const CacheManagerPage = () => {
       setAddressError("Invalid Ethereum address format");
     } else {
       setAddressError("");
-    }
-  };
-
-  // Add this transformation function
-  const formatEntries = (entries: RawEntry[]): FormattedEntry[] => {
-    return entries.map((entry) => ({
-      codeHash: entry[0],
-      size: BigInt(entry[1]),
-      ethBid: entry[2],
-    }));
-  };
-
-  // Initial data fetch
-  useEffect(() => {
-    const initialize = async () => {
-      try {
-        await fetchEntries();
-        await fetchCacheSize();
-        await fetchDecay();
-        await fetchQueueSize();
-        await checkIsPaused();
-        // await getContractTransactions();
-        // await getPlaceBidTransactions();
-      } catch (error) {
-        console.error("Initialization error:", error);
-        setErrorMessage("Failed to initialize: " + error);
-      }
-    };
-
-    initialize();
-  }, []);
-
-  const fetchCacheSize = async () => {
-    try {
-      setIsLoading(true);
-      const contract = await getContract();
-      const size = await contract.cacheSize();
-      setCacheSize(size.toString());
-    } catch (error) {
-      setErrorMessage("Failed to fetch cache size: " + error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -527,7 +562,29 @@ const CacheManagerPage = () => {
   ];
 
   return (
-    <div className="p-6 space-y-8 bg-gray-100 min-h-screen pl-[4rem] pr-[3rem] bg-gradient-to-br from-gray-100 to-gray-200">
+    <>
+      {!isConnected ? (
+        // Render the blurred image with connect button when not connected
+        <div className="relative w-full h-screen p-4">
+          <Image 
+            src="/blur_smart_cache_img.png" 
+            alt="Blurred Cache Manager"
+            fill
+            sizes="100vw"
+            className="opacity-80"
+          />
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <h1 className="text-3xl font-bold text-gray-900 mb-8 drop-shadow-lg">
+              Connect your wallet to access SmartCache
+            </h1>
+            <div className="z-10">
+              <ConnectKitButton />
+            </div>
+          </div>
+        </div>
+      ) : (
+        // Render the full component when connected
+        <div className="p-6 space-y-8 bg-gray-100 min-h-screen pl-[4rem] pr-[3rem] bg-gradient-to-br from-gray-100 to-gray-200">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-800 animate-fade-in-down">
           Cache Manager Analytics
@@ -1297,6 +1354,8 @@ const CacheManagerPage = () => {
         onUpdateData={handleDataUpdate}
       />
     </div>
+      )}
+    </>
   );
 };
 
