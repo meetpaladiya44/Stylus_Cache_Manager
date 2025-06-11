@@ -39,6 +39,7 @@ import { useRouter } from "next/navigation";
 import ConfigureAIModal from "./ConfigureAIModal ";
 import { ConnectKitButton } from "connectkit";
 import Image from "next/image";
+import { toast, Toaster } from "react-hot-toast";
 
 // Add function to check if wallet is connected
 const useIsConnected = () => {
@@ -151,8 +152,6 @@ const CacheManagerPage = () => {
   const [contractAddress, setContractAddress] = useState("");
   const [bidAmount, setBidAmount] = useState<any>("");
   const [queueSize, setQueueSize] = useState(null);
-  const [errorMessage, setErrorMessage] = useState<any>("");
-  const [successMessage, setSuccessMessage] = useState("");
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [searchTerm, setSearchTerm] = useState("");
@@ -215,14 +214,19 @@ const CacheManagerPage = () => {
     if (isConnected) {
       const initialize = async () => {
         try {
-          await fetchEntries();
-          await fetchCacheSize();
-          await fetchDecay();
-          await fetchQueueSize();
-          await checkIsPaused();
-        } catch (error) {
-          console.error("Initialization error:", error);
-          setErrorMessage("Failed to initialize: " + error);
+          toast.loading("Loading cache data...", { id: "initialization" });
+          await fetchEntries(false);
+          await fetchCacheSize(false);
+          await fetchDecay(false);
+          await fetchQueueSize(false);
+          await checkIsPaused(false);
+          toast.success("Cache data loaded successfully!", { id: "initialization" });
+        } catch (error: any) {
+          
+          // Parse initialization error
+          let errorMessage = "Failed to initialize cache data";
+          
+          toast.error(errorMessage);
         }
       };
 
@@ -230,14 +234,18 @@ const CacheManagerPage = () => {
     }
   }, [isConnected]); // Add isConnected as dependency
 
-  const fetchCacheSize = async () => {
+  const fetchCacheSize = async (showToast = true) => {
     try {
       setIsLoading(true);
       const contract = await getContract();
       const size = await contract.cacheSize();
       setCacheSize(size.toString());
-    } catch (error) {
-      setErrorMessage("Failed to fetch cache size: " + error);
+    } catch (error: any) {
+      console.error("Error fetching cache size:", error);
+      const errorMessage = showToast ? `Failed to fetch cache size: ${error?.message || error}` : "Error fetching cache size";
+      if (showToast) {
+        toast.error(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -257,42 +265,54 @@ const CacheManagerPage = () => {
   };
 
   // Fetch Decay
-  const fetchDecay = async () => {
+  const fetchDecay = async (showToast = true) => {
     try {
       setIsLoading(true);
       const contract = await getContract();
       const decay = await contract.decay();
       setDecay(decay.toString());
-    } catch (error) {
-      setErrorMessage("Failed to fetch decay: " + error);
+    } catch (error: any) {
+      console.error("Error fetching decay:", error);
+      const errorMessage = showToast ? `Failed to fetch decay: ${error?.message || error}` : "Error fetching decay";
+      if (showToast) {
+        toast.error(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   // Fetch Queue Size
-  const fetchQueueSize = async () => {
+  const fetchQueueSize = async (showToast = true) => {
     try {
       setIsLoading(true);
       const contract = await getContract();
       const size = await contract.queueSize();
       setQueueSize(size.toString());
-    } catch (error) {
-      setErrorMessage("Failed to fetch queue size: " + error);
+    } catch (error: any) {
+      console.error("Error fetching queue size:", error);
+      const errorMessage = showToast ? `Failed to fetch queue size: ${error?.message || error}` : "Error fetching queue size";
+      if (showToast) {
+        toast.error(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   // Check if Paused
-  const checkIsPaused = async () => {
+  const checkIsPaused = async (showToast = true) => {
     try {
       setIsLoading(true);
       const contract = await getContract();
       const paused = await contract.isPaused();
       setIsPaused(paused);
-    } catch (error) {
-      setErrorMessage("Failed to check if paused: " + error);
+    } catch (error: any) {
+      console.error("Error checking pause status:", error);
+      const errorMessage = showToast ? `Failed to check if paused: ${error?.message || error}` : "Error checking pause status";
+      if (showToast) {
+        toast.error(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -342,7 +362,7 @@ const CacheManagerPage = () => {
     return formatValue(proxyResult);
   };
 
-  const fetchEntries = async () => {
+  const fetchEntries = async (showToast = true) => {
     try {
       console.log("inside fetch entries");
       setIsLoading(true);
@@ -358,10 +378,12 @@ const CacheManagerPage = () => {
       const numberOfEntries = formattedEntries.length;
       setEntriesCount(numberOfEntries);
       setEntries(formattedEntries);
-      setSuccessMessage(`Fetched ${numberOfEntries} valid entries.`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching entries:", error);
-      setErrorMessage("Failed to fetch entries: " + error);
+      const errorMessage = showToast ? `Failed to fetch entries: ${error?.message || error}` : "Error fetching entries";
+      if (showToast) {
+        toast.error(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -379,20 +401,12 @@ const CacheManagerPage = () => {
   const handlePlaceBid = async () => {
     try {
       setIsLoading(true);
-      setErrorMessage("");
-      setSuccessMessage("");
-
-      if (!ethers.isAddress(contractAddress)) {
-        throw new Error("Invalid contract address");
-      }
 
       if (isNaN(bidAmount) || parseFloat(bidAmount) <= 0) {
         throw new Error("Bid amount must be greater than zero");
       }
 
-      if (minBid && parseFloat(bidAmount) < parseFloat(minBid)) {
-        throw new Error(`Bid amount must be at least ${minBid} ETH`);
-      }
+      toast.loading("Placing bid...", { id: "place-bid" });
 
       const provider = await getProvider();
       await provider.send("eth_requestAccounts", []);
@@ -405,26 +419,84 @@ const CacheManagerPage = () => {
       });
 
       await tx.wait();
-      setSuccessMessage("Bid placed successfully!");
+      toast.success("Bid placed successfully!", { id: "place-bid" });
+
+      // Clear form
+      setContractAddress("");
+      setBidAmount("");
 
       // Refresh the entries after successful bid
       await fetchEntries();
-    } catch (error) {
-      console.error(error);
-      setErrorMessage(`Failed to place bid: ${error}`);
+    } catch (error: any) {
+      console.error("Error placing bid:", error);
+      
+      // Parse smart contract errors for user-friendly messages
+      let errorMessage = "Error placing bid";
+      
+      const errorString = String(error);
+      
+      // Check for common smart contract error patterns
+      if (errorString.includes("transaction execution reverted")) {
+        errorMessage = "Failed to place bid: Transaction reverted by smart contract";
+      } else if (errorString.includes("insufficient funds")) {
+        errorMessage = "Failed to place bid: Insufficient funds";
+      } else if (errorString.includes("user rejected")) {
+        errorMessage = "Failed to place bid: Transaction rejected by user";
+      } else if (errorString.includes("network")) {
+        errorMessage = "Failed to place bid: Network error";
+      } else if (errorString.includes("gas")) {
+        errorMessage = "Failed to place bid: Gas estimation failed";
+      } else if (error?.reason) {
+        errorMessage = `Failed to place bid: ${error.reason}`;
+      } else if (error?.message) {
+        // For other errors, try to extract a meaningful part
+        const message = error.message;
+        if (message.length > 100) {
+          errorMessage = "Failed to place bid: Contract execution failed";
+        } else {
+          errorMessage = `Failed to place bid: ${message}`;
+        }
+      }
+      
+      toast.error(errorMessage, { id: "place-bid" });
     } finally {
       setIsLoading(false);
     }
   };
 
   const fetchSmallestEntries = async (k: any) => {
+    if (!k || isNaN(k) || parseInt(k) <= 0) {
+      toast.error("Please enter a valid number greater than 0");
+      return;
+    }
+
     try {
       setFetchingSmallestEntries(true);
+      toast.loading("Fetching smallest entries...", { id: "smallest-entries" });
+      
       const contract = await getContract();
       const smallestEntries = await contract.getSmallestEntries(k);
       setSmallestEntries(smallestEntries);
-    } catch (error) {
-      setErrorMessage("Failed to fetch smallest entries: " + error);
+      
+      toast.success(`Fetched ${k} smallest entries successfully!`, { id: "smallest-entries" });
+    } catch (error: any) {
+      console.error("Error fetching smallest entries:", error);
+      
+      // Parse error for user-friendly message
+      let errorMessage = "Error fetching smallest entries";
+      const errorString = String(error);
+      
+      if (errorString.includes("transaction execution reverted")) {
+        errorMessage = "Failed to fetch smallest entries: Contract execution failed";
+      } else if (errorString.includes("network")) {
+        errorMessage = "Failed to fetch smallest entries: Network error";
+      } else if (error?.message && error.message.length <= 100) {
+        errorMessage = `Failed to fetch smallest entries: ${error.message}`;
+      } else {
+        errorMessage = "Failed to fetch smallest entries: Unable to retrieve data";
+      }
+      
+      toast.error(errorMessage, { id: "smallest-entries" });
     } finally {
       setFetchingSmallestEntries(false);
     }
@@ -563,6 +635,33 @@ const CacheManagerPage = () => {
 
   return (
     <>
+      <Toaster 
+        position="top-center"  
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#363636',
+            color: '#fff',
+          },
+          success: {
+            duration: 3000,
+            style: {
+              background: '#10B981',
+            },
+          },
+          error: {
+            duration: 5000,
+            style: {
+              background: '#EF4444',
+            },
+          },
+          loading: {
+            style: {
+              background: '#3B82F6',
+            },
+          },
+        }}
+      />
       {!isConnected ? (
         // Render the blurred image with connect button when not connected
         <div className="relative w-full h-screen p-4">

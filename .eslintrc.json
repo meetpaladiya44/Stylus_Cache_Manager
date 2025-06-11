@@ -1,3 +1,7 @@
 {
-  "extends": "next/core-web-vitals"
+  "extends": "next/core-web-vitals",
+  "rules": {
+    // allow unescaped <, >, ', " etc. in your JSX
+    "react/no-unescaped-entities": "off"
+  }
 }
