@@ -642,7 +642,7 @@ const UserDashboard = () => {
               <p className="text-xs opacity-80">Bids placed</p>
             </div>
 
-            <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg shadow-lg p-6">
+            {/* <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg shadow-lg p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-sm opacity-80">Total Amount</p>
@@ -653,7 +653,7 @@ const UserDashboard = () => {
                 <Wallet className="h-8 w-8 opacity-80" />
               </div>
               <p className="text-xs opacity-80">Total bid amount</p>
-            </div>
+            </div> */}
           </div>
 
           {/* Bids Table */}
@@ -733,7 +733,7 @@ const UserDashboard = () => {
                             </td>
                             <td className="py-3 px-4">
                               <span className="inline-block bg-gray-100 text-gray-800 px-2 py-1 rounded-full text-sm font-medium">
-                                {formatEthAmount(bid.args.bid)} ETH
+                                {(bid.args.bid)}
                               </span>
                             </td>
                             <td className="py-3 px-4 text-gray-600">{bid.args.size.toString()} bytes</td>
