@@ -1030,7 +1030,7 @@ const CacheManagerPage = () => {
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip
                   formatter={(value: any, name: any) => {
-                    if (name === "bid") return `${value.toFixed(4)} ETH`;
+                    if (name === "bid") return `${value.toFixed(4)}`;
                     if (name === "size")
                       return `${value.toLocaleString()} bytes`;
                     return value;
@@ -1049,7 +1049,7 @@ const CacheManagerPage = () => {
                   type="monotone"
                   dataKey="bid"
                   stroke="#8884d8"
-                  name="Bid (ETH)"
+                  name="Bid Value"
                   dot={{ r: 4 }}
                 />
               </LineChart>
@@ -1087,14 +1087,14 @@ const CacheManagerPage = () => {
                 />
                 <YAxis
                   label={{
-                    value: "ETH",
+                    value: "Bid Value",
                     angle: -90,
                     position: "insideLeft",
                   }}
                   tick={{ fontSize: 12 }}
                 />
                 <Tooltip
-                  formatter={(value: any) => `${value.toFixed(6)} ETH`}
+                  formatter={(value: any) => `${value.toFixed(6)}`}
                   labelFormatter={(label) => `Code Hash: ${label}`}
                 />
                 <Legend />
@@ -1238,7 +1238,7 @@ const CacheManagerPage = () => {
                     onClick={() => handleSort("bid")}
                     className="font-semibold text-xs uppercase tracking-wider flex items-center"
                   >
-                    Bid Amount (ETH)
+                    Bid Value
                     {sortColumn === "bid" &&
                       (sortDirection === "asc" ? (
                         <ChevronUp className="ml-2 h-4 w-4" />
@@ -1346,7 +1346,7 @@ const CacheManagerPage = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Bid Amount (ETH)
+                Bid Value
               </label>
               <input
                 type="number"
