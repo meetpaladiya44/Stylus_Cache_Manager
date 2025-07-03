@@ -186,13 +186,12 @@ const UserDashboard = () => {
           BigInt(cachedData.earliestFetchedBlock) === BigInt(0);
         setHasMoreData(
           !hasScannedFromGenesis &&
-            BigInt(cachedData.earliestFetchedBlock) > BigInt(0)
+          BigInt(cachedData.earliestFetchedBlock) > BigInt(0)
         );
 
         console.log(
-          `🔄 Cache loaded. Has more data: ${
-            !hasScannedFromGenesis &&
-            BigInt(cachedData.earliestFetchedBlock) > BigInt(0)
+          `🔄 Cache loaded. Has more data: ${!hasScannedFromGenesis &&
+          BigInt(cachedData.earliestFetchedBlock) > BigInt(0)
           } (scanned from genesis: ${hasScannedFromGenesis})`
         );
       } else {
@@ -355,8 +354,7 @@ const UserDashboard = () => {
           `⚠️ No bids found in recent ${INITIAL_BLOCKS_RANGE.toLocaleString()} blocks. Starting comprehensive scan from block 0...`
         );
         console.log(
-          `🔍 Comprehensive scan range: 0 to ${
-            startBlock - BigInt(1)
+          `🔍 Comprehensive scan range: 0 to ${startBlock - BigInt(1)
           } (${startBlock} blocks)`
         );
 
@@ -391,8 +389,7 @@ const UserDashboard = () => {
         setEarliestFetchedBlock(startBlock);
         setHasMoreData(startBlock > BigInt(0)); // Show "Load more" only if there are older blocks
         console.log(
-          `✅ Found bids in recent blocks. Can load ${
-            startBlock > BigInt(0) ? "older blocks" : "no more blocks"
+          `✅ Found bids in recent blocks. Can load ${startBlock > BigInt(0) ? "older blocks" : "no more blocks"
           }`
         );
 
@@ -428,8 +425,7 @@ const UserDashboard = () => {
       // Show success toast
       if (fetchedBids.length > 0) {
         toast.success(
-          `Successfully found ${fetchedBids.length} bid${
-            fetchedBids.length > 1 ? "s" : ""
+          `Successfully found ${fetchedBids.length} bid${fetchedBids.length > 1 ? "s" : ""
           }!`
         );
       } else {
@@ -540,8 +536,7 @@ const UserDashboard = () => {
 
       // Show success toast
       toast.success(
-        `Successfully loaded all historical data! Found ${
-          uniqueBids.length
+        `Successfully loaded all historical data! Found ${uniqueBids.length
         } total bid${uniqueBids.length > 1 ? "s" : ""}!`
       );
     } catch (err) {
@@ -559,8 +554,7 @@ const UserDashboard = () => {
     if (!address || !publicClient) return [];
 
     console.log(
-      `🔎 Fetching bids in range: ${fromBlock} to ${toBlock} (${
-        toBlock - fromBlock + BigInt(1)
+      `🔎 Fetching bids in range: ${fromBlock} to ${toBlock} (${toBlock - fromBlock + BigInt(1)
       } blocks)`
     );
 
@@ -789,13 +783,20 @@ const UserDashboard = () => {
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white rounded-lg shadow-lg p-8 w-96 text-center">
-          <Wallet className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-          <h2 className="text-xl font-semibold mb-2">Connect Your Wallet</h2>
-          <p className="text-gray-600">
-            Please connect your wallet to view your bidding dashboard.
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 flex items-center justify-center">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-2xl border border-slate-200/60 p-12 w-full max-w-md text-center">
+          <div className="mb-6">
+            <Wallet className="w-20 h-20 mx-auto text-slate-400" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-4">Connect Your Wallet</h2>
+          <p className="text-slate-600 leading-relaxed">
+            Please connect your wallet to view your personalized bidding dashboard and track your transactions.
           </p>
+          <div className="mt-8 p-4 bg-blue-50 rounded-xl border border-blue-100">
+            <p className="text-sm text-blue-700">
+              Your dashboard will show real-time bid history, analytics, and savings data.
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -831,131 +832,178 @@ const UserDashboard = () => {
         }}
       />
 
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-8 flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                My Bidding Dashboard
-              </h1>
-              <p className="text-gray-600">
-                Track your bids and contracts on the Cache Manager
-              </p>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100">
+        {/* Header Section */}
+        <div className="bg-white/60 backdrop-blur-sm border-b border-slate-200/60 sticky top-0 z-10">
+          <div className="max-w-7xl mx-auto px-6 lg:px-8 py-6">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="space-y-1">
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+                  My Bidding Dashboard
+                </h1>
+                <p className="text-slate-600">
+                  Track your bids and contracts on the Cache Manager
+                </p>
+              </div>
+              <button
+                onClick={clearCache}
+                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-xl hover:from-blue-700 hover:to-blue-600 transition-all shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-blue-200 flex items-center gap-2"
+              >
+                <Database className="w-4 h-4" />
+                Refresh Data
+              </button>
             </div>
-            <button
-              onClick={clearCache}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-sm"
-            >
-              Refresh Data
-            </button>
           </div>
+        </div>
 
+        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8 space-y-8">
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-lg shadow-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-sm opacity-80">Total Contracts</p>
-                  <div className="text-2xl font-bold">
-                    {getUniqueContracts()}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="group relative bg-white rounded-2xl p-8 shadow-lg border border-slate-200/60 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10 hover:-translate-y-1">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="relative">
+                <div className="flex items-start justify-between mb-6">
+                  <div className="p-4 bg-blue-100 rounded-xl group-hover:bg-blue-200 transition-colors duration-300">
+                    <Database className="w-8 h-8 text-blue-600" />
+                  </div>
+                  <div className="flex items-center gap-1 px-3 py-1 bg-blue-100 rounded-full">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                    <span className="text-xs font-medium text-blue-700">Active</span>
                   </div>
                 </div>
-                <Database className="h-8 w-8 opacity-80" />
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-slate-600">Total Contracts</p>
+                  <h3 className="text-3xl font-bold text-slate-900">
+                    {getUniqueContracts()}
+                  </h3>
+                  <p className="text-sm text-slate-500">Contracts you've bid on</p>
+                </div>
               </div>
-              <p className="text-xs opacity-80">Contracts you've bid on</p>
             </div>
 
-            <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg shadow-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-sm opacity-80">Total Bids</p>
-                  <div className="text-2xl font-bold">{userBids.length}</div>
+            <div className="group relative bg-white rounded-2xl p-8 shadow-lg border border-slate-200/60 transition-all duration-300 hover:shadow-xl hover:shadow-green-500/10 hover:-translate-y-1">
+              <div className="absolute inset-0 bg-gradient-to-br from-green-50 to-green-100/50 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="relative">
+                <div className="flex items-start justify-between mb-6">
+                  <div className="p-4 bg-green-100 rounded-xl group-hover:bg-green-200 transition-colors duration-300">
+                    <TrendingUp className="w-8 h-8 text-green-600" />
+                  </div>
+                  <div className="flex items-center gap-1 px-3 py-1 bg-green-100 rounded-full">
+                    <CheckCircle className="w-3 h-3 text-green-600" />
+                    <span className="text-xs font-medium text-green-700">Tracked</span>
+                  </div>
                 </div>
-                <TrendingUp className="h-8 w-8 opacity-80" />
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-slate-600">Total Bids</p>
+                  <h3 className="text-3xl font-bold text-slate-900">{userBids.length}</h3>
+                  <p className="text-sm text-slate-500">Bids successfully placed</p>
+                </div>
               </div>
-              <p className="text-xs opacity-80">Bids placed</p>
             </div>
           </div>
 
           {/* Bids Table */}
-          <div className="bg-white rounded-lg shadow-lg">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Your Bid History
-              </h2>
+          <div className="bg-white rounded-2xl shadow-lg border border-slate-200/60 transition-all duration-300 hover:shadow-xl">
+            <div className="p-8 border-b border-slate-100">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
+                    <Clock className="w-6 h-6 text-blue-600" />
+                    Your Bid History
+                  </h2>
+                  <p className="text-sm text-slate-600">Complete transaction history with analytics</p>
+                </div>
+                {userBids.length > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    <span className="text-slate-700 text-sm font-medium">{userBids.length} transactions</span>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="p-6">
+            <div className="p-8">
               {loading ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
-                  <p className="mt-2 text-gray-600">
+                <div className="text-center py-12">
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"></div>
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
                     {loadStats.userEvents === 0
                       ? "Scanning recent blocks for your bids..."
                       : loadStats.userEvents > 0
-                      ? `Found ${loadStats.userEvents} bids! Loading details...`
-                      : "Performing comprehensive blockchain scan..."}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
+                        ? `Found ${loadStats.userEvents} bids! Loading details...`
+                        : "Performing comprehensive blockchain scan..."}
+                  </h3>
+                  <p className="text-sm text-slate-500">
                     {userBids.length === 0 && loadStats.totalEvents > 0
                       ? "If no recent bids found, automatically scanning all historical blocks..."
                       : "This might take a while for comprehensive scanning"}
                   </p>
                 </div>
               ) : error ? (
-                <div className="text-center py-8">
-                  <p className="text-red-600">{error}</p>
+                <div className="text-center py-12">
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mb-4">
+                    <Database className="w-8 h-8 text-red-500" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">Error Loading Data</h3>
+                  <p className="text-red-600 mb-4">{error}</p>
                   <button
                     onClick={fetchInitialUserBids}
-                    className="mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-xl hover:from-blue-700 hover:to-blue-600 transition-all shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
                   >
                     Retry
                   </button>
                 </div>
               ) : userBids.length === 0 ? (
-                <div className="text-center py-8">
-                  <Database className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                  <h3 className="text-lg font-semibold mb-2">No Bids Found</h3>
-                  <p className="text-gray-600">
-                    You haven't placed any bids in the recent blocks or none
-                    were found.
+                <div className="text-center py-12">
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-slate-100 rounded-full mb-4">
+                    <Database className="w-8 h-8 text-slate-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">No Bids Found</h3>
+                  <p className="text-slate-600 mb-4">
+                    You haven't placed any bids in the recent blocks or none were found.
                   </p>
+                  <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 inline-block">
+                    <p className="text-sm text-blue-700">
+                      Start by placing your first bid in the Cache Manager
+                    </p>
+                  </div>
                 </div>
               ) : (
                 <>
-                  <div className="overflow-x-auto">
+                  <div className="overflow-hidden rounded-xl border border-slate-200">
                     <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-gray-200">
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">
                             Contract Address
                           </th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                            Bid
+                          <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">
+                            Bid Amount
                           </th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                          <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">
                             Bid Savings
                           </th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                          <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">
                             Size
                           </th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                          <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">
                             Timestamp
                           </th>
-                          <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                          <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">
                             Transaction
                           </th>
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody className="bg-white divide-y divide-slate-100">
                         {userBids.map((bid, index) => (
                           <tr
                             key={index}
-                            className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                            className={`transition-colors duration-200 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover:bg-blue-50/60`}
                           >
-                            <td className="py-3 px-4">
-                              <div className="flex items-center gap-2">
-                                <code className="text-sm bg-gray-100 px-2 py-1 rounded font-mono">
+                            <td className="py-4 px-6">
+                              <div className="flex items-center gap-3">
+                                <code className="text-sm bg-slate-100 px-3 py-2 rounded-lg font-mono border">
                                   {formatAddress(bid.args.program)}
                                 </code>
                                 <button
@@ -967,46 +1015,46 @@ const UserDashboard = () => {
                                       "Contract address copied to clipboard!"
                                     );
                                   }}
-                                  className="text-blue-500 hover:text-blue-700 text-xs transition-colors"
+                                  className="text-blue-500 hover:text-blue-700 text-xs transition-colors px-2 py-1 rounded hover:bg-blue-50"
                                 >
                                   Copy
                                 </button>
                               </div>
                             </td>
-                            <td className="py-3 px-4">
-                              <span className="inline-block bg-gray-100 text-gray-800 px-2 py-1 rounded-full text-sm font-medium">
+                            <td className="py-4 px-6">
+                              <span className="inline-block bg-gradient-to-r from-blue-50 to-blue-100 text-blue-800 px-3 py-2 rounded-full text-sm font-semibold border border-blue-200">
                                 {bid.args.bid.toString()}
                               </span>
                             </td>
-                            <td className="py-3 px-4">
+                            <td className="py-4 px-6">
                               <span
-                                className={`inline-block px-2 py-1 rounded-full text-sm font-medium ${
-                                  !minBidFromEntries
-                                    ? "bg-gray-100 text-gray-800"
-                                    : bid.args.bid === minBidFromEntries
-                                    ? "bg-green-100 text-green-800"
+                                className={`inline-block px-3 py-2 rounded-full text-sm font-semibold border ${!minBidFromEntries
+                                  ? "bg-slate-100 text-slate-800 border-slate-200"
+                                  : bid.args.bid === minBidFromEntries
+                                    ? "bg-green-100 text-green-800 border-green-200"
                                     : bid.args.bid > minBidFromEntries
-                                    ? "bg-yellow-100 text-yellow-800"
-                                    : "bg-blue-100 text-blue-800"
-                                }`}
+                                      ? "bg-yellow-100 text-yellow-800 border-yellow-200"
+                                      : "bg-blue-100 text-blue-800 border-blue-200"
+                                  }`}
                               >
                                 {calculateBidSavings(bid.args.bid)}
                               </span>
                             </td>
-                            <td className="py-3 px-4 text-gray-600">
+                            <td className="py-4 px-6 text-slate-600 font-medium">
                               {bid.args.size.toString()} bytes
                             </td>
-                            <td className="py-3 px-4 text-sm text-gray-600">
+                            <td className="py-4 px-6 text-sm text-slate-600">
                               {formatTimestamp(bid.timestamp)}
                             </td>
-                            <td className="py-3 px-4">
+                            <td className="py-4 px-6">
                               <a
                                 href={`https://sepolia.arbiscan.io/tx/${bid.transactionHash}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-blue-500 hover:text-blue-700 text-sm transition-colors"
+                                className="inline-flex items-center gap-1 text-blue-500 hover:text-blue-700 text-sm transition-colors px-2 py-1 rounded hover:bg-blue-50"
                               >
                                 View on Arbiscan
+                                <ChevronRight className="w-3 h-3" />
                               </a>
                             </td>
                           </tr>
@@ -1017,15 +1065,15 @@ const UserDashboard = () => {
 
                   {/* Load more button */}
                   {hasMoreData && (
-                    <div className="flex justify-center mt-6">
+                    <div className="flex justify-center mt-8">
                       <button
                         onClick={fetchMoreUserBids}
                         disabled={loadingMore}
-                        className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors flex items-center gap-2 disabled:opacity-50"
+                        className="px-6 py-3 bg-gradient-to-r from-slate-600 to-slate-500 text-white rounded-xl hover:from-slate-700 hover:to-slate-600 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
                       >
                         {loadingMore ? (
                           <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
                             Loading older blocks (0 -{" "}
                             {earliestFetchedBlock?.toString()})...
                           </>

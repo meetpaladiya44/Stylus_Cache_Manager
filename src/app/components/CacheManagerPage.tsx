@@ -1293,7 +1293,7 @@ const CacheManagerPage = () => {
         // Render the blurred image with connect button when not connected
         <div className="relative w-full h-screen p-4">
           <Image
-            src="/blur_smart_cache_img.png"
+            src="/image.png"
             alt="Blurred Cache Manager"
             fill
             sizes="100vw"
