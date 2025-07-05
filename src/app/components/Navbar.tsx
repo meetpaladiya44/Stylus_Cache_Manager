@@ -2,12 +2,11 @@
 import React from "react";
 import Image from "next/image";
 import Link from "next/link";
-// import Hero from "../assets/Stylus_Landing_bg.png";
 import Hero from "../assets/SmartCache_logo.svg";
 import Providers from "../Providers";
 import { ConnectKitButton } from "connectkit";
 import { useEffect, useState } from 'react'
-import { X, Menu } from 'lucide-react'
+import { X, Menu, Activity, Database, Brain } from 'lucide-react'
 
 const Navbar = () => {
   const [mounted, setMounted] = useState(false)
@@ -28,7 +27,6 @@ const Navbar = () => {
 
     if (mobileMenuOpen) {
       document.addEventListener('click', handleClickOutside);
-      // Prevent scrolling when menu is open
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
@@ -51,58 +49,67 @@ const Navbar = () => {
   }
 
   return (
-    <nav className="relative bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-700/50 backdrop-blur-sm">
+    <nav className="relative bg-zinc-900/90 backdrop-blur-xl border-b border-zinc-800/60 shadow-2xl">
       <div className="py-3 px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo Section */}
           <div className="flex items-center">
             <Link
               href="/"
-              className="flex items-center space-x-3 group transition-all duration-300 hover:scale-105"
+              className="flex items-center space-x-3 group transition-all duration-300 hover:scale-[1.02]"
               onClick={closeMobileMenu}
             >
-              <div className="relative">
+              <div className="relative z-50 p-2.5 rounded-xl bg-zinc-800/60 border border-zinc-700/60 group-hover:border-blue-500/40 transition-all duration-300 shadow-lg">
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                 <Image
                   src={Hero}
                   alt="SmartCache Logo"
-                  width={180}
-                  height={45}
-                  className="transition-all duration-300 group-hover:brightness-110"
+                  width={130}
+                  height={32}
+                  className="transition-all duration-300 group-hover:brightness-110 relative z-10"
                 />
               </div>
+              {/* <div className="hidden sm:block">
+                <h1 className="text-xl font-bold bg-gradient-to-r from-zinc-100 via-white to-zinc-200 bg-clip-text text-transparent">
+                  Smart Cache
+                </h1>
+                <p className="text-xs text-zinc-500 font-medium tracking-wide">Stylus Manager</p>
+              </div> */}
             </Link>
           </div>
 
           {/* Desktop Navigation Links */}
           <div className="hidden md:block">
-            <div className="ml-10 flex items-baseline space-x-8">
+            <div className="flex items-center space-x-1">
               <Link
                 href="/"
-                className="relative text-slate-300 hover:text-white px-3 py-2 text-sm font-medium transition-all duration-300 group"
+                className="relative group flex items-center gap-2.5 px-5 py-2.5 text-sm font-medium text-zinc-300 hover:text-zinc-100 transition-all duration-300 rounded-xl hover:bg-zinc-800/60"
               >
+                <Activity className="w-4 h-4 group-hover:text-blue-400 transition-colors duration-300" />
                 <span className="relative z-10">Home</span>
-                <div className="absolute inset-0 bg-slate-700/50 rounded-full scale-0 group-hover:scale-100 transition-transform duration-300"></div>
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 rounded-xl scale-0 group-hover:scale-100 transition-transform duration-300"></div>
               </Link>
               <Link
                 href="/dashboard"
-                className="relative text-slate-300 hover:text-white px-3 py-2 text-sm font-medium transition-all duration-300 group"
+                className="relative group flex items-center gap-2.5 px-5 py-2.5 text-sm font-medium text-zinc-300 hover:text-zinc-100 transition-all duration-300 rounded-xl hover:bg-zinc-800/60"
               >
+                <Database className="w-4 h-4 group-hover:text-green-400 transition-colors duration-300" />
                 <span className="relative z-10">My Dashboard</span>
-                <div className="absolute inset-0 bg-slate-700/50 rounded-full scale-0 group-hover:scale-100 transition-transform duration-300"></div>
+                <div className="absolute inset-0 bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-xl scale-0 group-hover:scale-100 transition-transform duration-300"></div>
               </Link>
-            </div>
-          </div>
 
-          {/* Connect Wallet Button - Desktop */}
-          <div className="hidden md:flex items-center">
-            {mounted && (
-              <div className="relative">
-                <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 to-slate-600 rounded-lg blur opacity-25 group-hover:opacity-75 transition duration-1000 group-hover:duration-200"></div>
-                <div className="relative">
-                  <ConnectKitButton />
-                </div>
+              {/* Connect Wallet Button - Desktop */}
+              <div className="hidden md:flex items-center">
+                {mounted && (
+                  <div className="relative group">
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl blur opacity-20 group-hover:opacity-40 transition duration-300"></div>
+                    <div className="relative bg-zinc-800/90 border border-zinc-700/60 rounded-xl p-0.5 hover:border-zinc-600/60 transition-all duration-300 shadow-lg">
+                      <ConnectKitButton />
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
 
           {/* Mobile menu button */}
@@ -110,14 +117,13 @@ const Navbar = () => {
             <button
               type="button"
               onClick={toggleMobileMenu}
-              className="mobile-menu-button bg-slate-800 inline-flex items-center justify-center p-2 rounded-md text-slate-400 hover:text-white hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-slate-500 transition-all duration-300"
+              className="mobile-menu-button relative z-50 bg-zinc-800/90 backdrop-blur-sm inline-flex items-center justify-center p-3 rounded-xl text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/60 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 border border-zinc-700/60 shadow-lg"
               aria-expanded={mobileMenuOpen}
             >
-              <span className="sr-only">Open main menu</span>
               {mobileMenuOpen ? (
-                <X className="block h-6 w-6" />
+                <X className="block h-5 w-5" />
               ) : (
-                <Menu className="block h-6 w-6" />
+                <Menu className="block h-5 w-5" />
               )}
             </button>
           </div>
@@ -126,48 +132,51 @@ const Navbar = () => {
 
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
-        <div className="relative inset-0 z-50 md:hidden">
+        <div className="md:hidden">
           {/* Backdrop */}
-          {/* <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity duration-300" /> */}
+          <div className="absolute inset-0 bg-zinc-900/90 backdrop-blur-sm z-40"></div>
 
           {/* Mobile menu panel */}
-          {/* <div className="mobile-menu inset-y-0 right-0 max-w-sm w-full bg-gradient-to-b from-slate-900 to-slate-800 shadow-xl transform transition-transform duration-300 ease-in-out"> */}
-            <div className="flex flex-col h-full">
-
+          <div className="relative z-40 bg-zinc-900/95 backdrop-blur-xl shadow-2xl">
+            <div className="flex flex-col">
               {/* Navigation Links */}
-              <div className="flex-1 px-6 py-6 space-y-4">
+              <div className="px-6 py-6 space-y-2">
                 <Link
                   href="/"
                   onClick={closeMobileMenu}
-                  className="block px-4 py-3 text-slate-300 hover:text-white hover:bg-slate-700/50 rounded-lg transition-all duration-200 text-base font-medium"
+                  className="flex items-center gap-3 px-4 py-3.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-xl transition-all duration-200 text-base font-medium border border-transparent hover:border-zinc-700/60"
                 >
+                  <Activity className="w-5 h-5 text-blue-400" />
                   Home
                 </Link>
                 <Link
                   href="/dashboard"
                   onClick={closeMobileMenu}
-                  className="block px-4 py-3 text-slate-300 hover:text-white hover:bg-slate-700/50 rounded-lg transition-all duration-200 text-base font-medium"
+                  className="flex items-center gap-3 px-4 py-3.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-xl transition-all duration-200 text-base font-medium border border-transparent hover:border-zinc-700/60"
                 >
+                  <Database className="w-5 h-5 text-green-400" />
                   My Dashboard
                 </Link>
-
               </div>
 
               {/* Connect Wallet Button - Mobile */}
-              <div className="p-6 border-t border-slate-700">
+              <div className="p-6 border-t border-zinc-800/60">
                 {mounted && (
-                  <div className="w-full">
-                    <ConnectKitButton />
+                  <div className="relative group w-fit">
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl blur opacity-20"></div>
+                    <div className="relative bg-zinc-800/90 border border-zinc-700/60 rounded-xl p-0.5 shadow-lg">
+                      <ConnectKitButton />
+                    </div>
                   </div>
                 )}
               </div>
             </div>
-          {/* </div> */}
+          </div>
         </div>
       )}
 
-      {/* Subtle glow effect at bottom */}
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-slate-500 to-transparent opacity-50"></div>
+      {/* Enhanced bottom glow effect */}
+      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-500/40 to-transparent"></div>
     </nav>
   );
 };

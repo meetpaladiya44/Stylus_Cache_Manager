@@ -1267,50 +1267,63 @@ const CacheManagerPage = () => {
         toastOptions={{
           duration: 4000,
           style: {
-            background: "#363636",
+            background: "#27272a",
             color: "#fff",
+            border: '1px solid #3f3f46',
           },
           success: {
             duration: 3000,
             style: {
-              background: "#10B981",
+              background: "#166534",
+              border: '1px solid #15803d',
             },
           },
           error: {
             duration: 5000,
             style: {
-              background: "#EF4444",
+              background: "#991b1b",
+              border: '1px solid #dc2626',
             },
           },
           loading: {
             style: {
-              background: "#3B82F6",
+              background: "#1e40af",
+              border: '1px solid #2563eb',
             },
           },
         }}
       />
       {!isConnected ? (
         // Render the blurred image with connect button when not connected
-        <div className="relative w-full h-screen p-4">
+        <div className="relative w-full h-screen bg-zinc-900">
+          <div className="absolute inset-0 bg-gradient-to-br from-zinc-900/90 via-zinc-800/80 to-zinc-900/90"></div>
           <Image
             src="/image.png"
             alt="Blurred Cache Manager"
             fill
             sizes="100vw"
-            className="opacity-80"
+            className="opacity-30 object-cover"
           />
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <h1 className="text-3xl font-bold text-gray-900 mb-8 drop-shadow-lg">
-              Connect your wallet to access SmartCache
-            </h1>
-            <div className="z-10">
-              <ConnectKitButton />
+            <div className="text-center space-y-6 p-8 rounded-2xl bg-zinc-800/50 backdrop-blur-xl border border-zinc-700/60 shadow-2xl">
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-zinc-100 to-zinc-300 bg-clip-text text-transparent">
+                Connect your wallet to access SmartCache
+              </h1>
+              <p className="text-zinc-400 text-lg max-w-md mx-auto">
+                Secure access to your cache management dashboard
+              </p>
+              <div className="z-10 relative group w-fit mx-auto">
+                <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl blur opacity-20 group-hover:opacity-40 transition duration-300"></div>
+                <div className="relative bg-zinc-800/80 border border-zinc-700/50 rounded-xl p-0.5">
+                  <ConnectKitButton />
+                </div>
+              </div>
             </div>
           </div>
         </div>
       ) : (
         // Render the full component when connected
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100">
+        <div className="min-h-screen bg-zinc-900">
           {/* Header Section */}
           <CacheManagerHeader isConnected={isConnected} setIsModalOpen={setIsModalOpen} ConnectKitButton={ConnectKitButton} />
 

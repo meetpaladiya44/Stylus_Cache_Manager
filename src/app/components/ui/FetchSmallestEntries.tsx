@@ -17,32 +17,32 @@ const FetchSmallestEntries: React.FC<FetchSmallestEntriesProps> = ({
   fetchingSmallestEntries,
   smallestEntries,
 }) => (
-  <div className="group relative bg-white rounded-2xl p-8 shadow-lg border border-slate-200/60 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10">
-    <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-blue-100/20 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+  <div className="group relative bg-zinc-800/50 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-zinc-700/60 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10">
+    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-blue-600/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
     <div className="relative">
       <div className="flex items-center gap-3 mb-8">
-        <div className="p-3 bg-blue-100 rounded-xl group-hover:bg-blue-200 transition-colors duration-300">
-          <Activity className="w-6 h-6 text-blue-600" />
+        <div className="p-3 bg-blue-500/10 rounded-xl group-hover:bg-blue-500/20 transition-colors duration-300 border border-blue-500/20">
+          <Activity className="w-6 h-6 text-blue-400" />
         </div>
         <div className="space-y-1">
-          <h2 className="text-2xl font-bold text-slate-900">Fetch Smallest Entries</h2>
-          <p className="text-sm text-slate-600">Get entries with lowest bids</p>
+          <h2 className="text-2xl font-bold text-zinc-100">Fetch Smallest Entries</h2>
+          <p className="text-sm text-zinc-400">Get entries with lowest bids</p>
         </div>
       </div>
       <div className="space-y-6">
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-2">Number of Entries</label>
+          <label className="block text-sm font-semibold text-zinc-300 mb-2">Number of Entries</label>
           <div className="flex gap-3">
             <input
               type="number"
               placeholder="Enter number"
               value={smallestEntriesCount}
               onChange={(e) => setSmallestEntriesCount(e.target.value)}
-              className="flex-1 px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-slate-50/50 hover:bg-white"
+              className="flex-1 px-4 py-3 border border-zinc-600/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-300 bg-zinc-700/50 hover:bg-zinc-700/70 text-zinc-100 placeholder-zinc-400"
             />
             <button
               onClick={() => fetchSmallestEntries(smallestEntriesCount)}
-              className="group relative px-6 py-3 bg-gradient-to-r from-slate-600 to-slate-700 text-white rounded-xl font-medium transition-all duration-300 hover:from-slate-700 hover:to-slate-800 hover:shadow-lg hover:shadow-slate-500/25 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group relative px-6 py-3 bg-gradient-to-r from-zinc-600 to-zinc-700 text-white rounded-xl font-medium transition-all duration-300 hover:from-zinc-700 hover:to-zinc-800 hover:shadow-lg hover:shadow-zinc-500/25 focus:outline-none focus:ring-2 focus:ring-zinc-500/50 focus:ring-offset-2 focus:ring-offset-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={fetchingSmallestEntries || !smallestEntriesCount}
             >
               <span className="flex items-center gap-2">
@@ -71,19 +71,19 @@ const FetchSmallestEntries: React.FC<FetchSmallestEntriesProps> = ({
                 className="space-y-3"
               >
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-700">Results</h3>
-                  <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-lg">
+                  <h3 className="text-sm font-semibold text-zinc-300">Results</h3>
+                  <span className="text-xs text-zinc-400 bg-zinc-700/50 px-2 py-1 rounded-lg border border-zinc-600/50">
                     {smallestEntries.length} entries
                   </span>
                 </div>
-                <div className="max-h-48 overflow-y-auto space-y-2 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <div className="max-h-48 overflow-y-auto space-y-2 p-4 bg-zinc-700/30 rounded-xl border border-zinc-600/50">
                   {smallestEntries.map((entry, index) => (
                     <motion.div
                       key={index}
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.1 }}
-                      className="p-3 bg-white rounded-lg border border-slate-200 font-mono text-sm text-slate-800 hover:shadow-sm transition-shadow duration-200"
+                      className="p-3 bg-zinc-800/50 rounded-lg border border-zinc-600/50 font-mono text-sm text-zinc-100 hover:shadow-sm hover:bg-zinc-700/50 transition-all duration-200"
                     >
                       {entry}
                     </motion.div>

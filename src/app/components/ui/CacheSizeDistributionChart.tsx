@@ -14,36 +14,45 @@ const CacheSizeDistributionChart = ({ chartDataCacheSize, hoveredChart, setHover
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.5 }}
-    className="group relative bg-white rounded-2xl p-8 shadow-lg border border-slate-200/60 transition-all duration-300 hover:shadow-xl hover:shadow-purple-500/10"
-    style={{ backgroundColor: hoveredChart === "cacheSize" ? "rgba(248, 251, 255, 0.5)" : "white" }}
+    className="group relative bg-zinc-800/50 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-zinc-700/60 transition-all duration-300 hover:shadow-xl hover:shadow-cyan-500/10"
+    style={{ backgroundColor: hoveredChart === "cacheSize" ? "rgba(39, 39, 42, 0.7)" : undefined }}
     onMouseEnter={() => setHoveredChart("cacheSize")}
     onMouseLeave={() => setHoveredChart(null)}
   >
     <div className="flex items-center justify-between mb-8">
       <div className="space-y-1">
-        <h2 className="text-2xl font-bold text-slate-900">Cache Size Distribution</h2>
-        <p className="text-sm text-slate-600">Entry size analysis and trends</p>
+        <h2 className="text-2xl font-bold text-zinc-100">Cache Size Distribution</h2>
+        <p className="text-sm text-zinc-400">Entry size analysis and trends</p>
       </div>
-      <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded-xl">
-        <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
-        <span className="text-purple-700 text-sm font-medium">Real-time</span>
+      <div className="flex items-center gap-2 px-3 py-2 bg-cyan-500/10 border border-cyan-500/30 rounded-xl">
+        <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></div>
+        <span className="text-cyan-300 text-sm font-medium">Real-time</span>
       </div>
     </div>
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={chartDataCacheSize}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="codeHash" interval={5} angle={-45} textAnchor="end" height={80} tick={{ fontSize: 5 }} />
-          <YAxis label={{ value: "Size (bytes)", angle: -90, position: "insideLeft", fontSize: 12 }} tick={{ fontSize: 8 }} />
-          <Tooltip formatter={(value) => `${value.toLocaleString()} bytes`} labelFormatter={(label) => `Code Hash: ${label}`} />
-          <Legend />
-          <Line type="monotone" dataKey="currentSize" stroke="#8884d8" name="Entry Size" dot={{ r: 4 }} />
-          <Line type="monotone" dataKey="averageSize" stroke="#82ca9d" name="Running Average" strokeDasharray="5 5" />
-          <Area type="monotone" dataKey="cumulativeSize" fill="#8884d8" stroke="#8884d8" fillOpacity={0.1} name="Cumulative Size" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" />
+          <XAxis dataKey="codeHash" interval={5} angle={-45} textAnchor="end" height={80} tick={{ fontSize: 5, fill: "#a1a1aa" }} />
+          <YAxis label={{ value: "Size (bytes)", angle: -90, position: "insideLeft", fontSize: 12, style: { textAnchor: 'middle', fill: '#a1a1aa' } }} tick={{ fontSize: 8, fill: "#a1a1aa" }} />
+          <Tooltip
+            formatter={(value) => `${value.toLocaleString()} bytes`}
+            labelFormatter={(label) => `Code Hash: ${label}`}
+            contentStyle={{
+              backgroundColor: '#27272a',
+              border: '1px solid #3f3f46',
+              borderRadius: '8px',
+              color: '#e4e4e7'
+            }}
+          />
+          <Legend wrapperStyle={{ color: '#a1a1aa' }} />
+          <Line type="monotone" dataKey="currentSize" stroke="#3b82f6" name="Entry Size" dot={{ r: 4 }} />
+          <Line type="monotone" dataKey="averageSize" stroke="#22c55e" name="Running Average" strokeDasharray="5 5" />
+          <Area type="monotone" dataKey="cumulativeSize" fill="#06b6d4" stroke="#06b6d4" fillOpacity={0.1} name="Cumulative Size" />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
-    <div className="mt-4 text-sm text-gray-600 flex justify-between">
+    <div className="mt-4 text-sm text-zinc-400 flex justify-between">
       <span>
         Total Cache Size: {chartDataCacheSize[chartDataCacheSize.length - 1]?.cumulativeSize.toLocaleString()} bytes
       </span>

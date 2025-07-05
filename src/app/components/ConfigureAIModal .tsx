@@ -136,20 +136,20 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
   // Use Tailwind for fade/scale effect
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-50  backdrop-blur-sm z-50 flex items-center justify-center"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center"
       style={{ margin: "0", padding: "0" }}
     >
       <Toaster position="top-center" reverseOrder={false} />
-      <div className="bg-white rounded-2xl p-8 w-full max-w-md m-4 space-y-6 shadow-2xl border border-blue-100 animate-fade-in-scale">
+      <div className="bg-zinc-800/95 backdrop-blur-xl rounded-2xl p-8 w-full max-w-md m-4 space-y-6 shadow-2xl border border-zinc-700/60 animate-fade-in-scale">
         {/* Header */}
-        <div className="flex items-center justify-between border-b pb-4">
+        <div className="flex items-center justify-between border-b border-zinc-700/50 pb-4">
           <div className="flex items-center gap-3">
-            <Settings className="w-7 h-7 text-blue-600 bg-blue-100 rounded-full p-1 shadow" />
-            <h2 className="text-2xl font-bold text-gray-800 tracking-tight">Add Balance</h2>
+            <Settings className="w-7 h-7 text-blue-400 bg-blue-500/20 rounded-full p-1 shadow border border-blue-500/30" />
+            <h2 className="text-2xl font-bold text-zinc-100 tracking-tight">Add Balance</h2>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-700 transition-colors rounded-full p-1 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="text-zinc-400 hover:text-zinc-100 transition-colors rounded-full p-1 focus:outline-none focus:ring-2 focus:ring-blue-500/50 hover:bg-zinc-700/50"
             aria-label="Close modal"
           >
             <svg
@@ -171,27 +171,27 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
         {/* Form */}
         <div className="space-y-5">
           <div className="space-y-2 relative">
-            <label className="block text-sm font-semibold text-gray-700 flex items-center gap-1">
+            <label className="block text-sm font-semibold text-zinc-300 flex items-center gap-1">
               Contract Address
-              <span className="text-xs text-gray-400" title="The address of your deployed contract.">(?)</span>
+              <span className="text-xs text-zinc-500" title="The address of your deployed contract.">(?)</span>
             </label>
             <input
               type="text"
               placeholder="0x..."
               value={contractAddress}
               onChange={handleAddressChange}
-              className={`w-full px-4 py-3 border ${addressError ? "border-red-300" : "border-gray-300"} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all bg-slate-50/80 hover:bg-white text-gray-900 placeholder-gray-400 shadow-sm`}
+              className={`w-full px-4 py-3 border ${addressError ? "border-red-500/50" : "border-zinc-600/50"} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all bg-zinc-700/50 hover:bg-zinc-700/70 text-zinc-100 placeholder-zinc-400 shadow-sm`}
             />
             {addressError && (
-              <p className="text-xs text-red-600 mt-1">{addressError}</p>
+              <p className="text-xs text-red-400 mt-1">{addressError}</p>
             )}
-            <p className="text-xs text-gray-400 mt-1">Enter the Ethereum address of your contract.</p>
+            <p className="text-xs text-zinc-500 mt-1">Enter the Ethereum address of your contract.</p>
           </div>
 
           <div className="space-y-2">
-            <label className="block text-sm font-semibold text-gray-700 flex items-center gap-1">
+            <label className="block text-sm font-semibold text-zinc-300 flex items-center gap-1">
               Monthly Bid Budget (in ETH)
-              <span className="text-xs text-gray-400" title="The maximum ETH you want to allocate per month.">(?)</span>
+              <span className="text-xs text-zinc-500" title="The maximum ETH you want to allocate per month.">(?)</span>
             </label>
             <input
               type="number"
@@ -199,35 +199,48 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
               placeholder="0.5"
               value={monthlyBid}
               onChange={(e) => setMonthlyBid(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/80 hover:bg-white text-gray-900 placeholder-gray-400 shadow-sm"
+              className="w-full px-4 py-3 border border-zinc-600/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all bg-zinc-700/50 hover:bg-zinc-700/70 text-zinc-100 placeholder-zinc-400 shadow-sm"
             />
-            <p className="text-xs text-gray-400 mt-1">Set your monthly budget for cache operations.</p>
+            <p className="text-xs text-zinc-500 mt-1">Set your monthly budget for automated bidding.</p>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex justify-end pt-4 border-t gap-2">
+        {/* Action Buttons */}
+        <div className="flex space-x-3 pt-4">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-[6px] border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-            type="button"
+            className="flex-1 px-4 py-3 border border-zinc-600/50 text-zinc-300 rounded-lg hover:bg-zinc-700/50 transition-all focus:outline-none focus:ring-2 focus:ring-zinc-400 font-medium"
           >
             Cancel
           </button>
           <button
             onClick={handleConfigure}
-            disabled={
-              !contractAddress || !!addressError || !monthlyBid || isLoading
-            }
-            className="bg-gradient-to-r from-blue-600 to-blue-500 text-white px-4 py-2 hover:from-blue-700 hover:to-blue-600 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed rounded-[6px] shadow-lg transition-all focus:outline-none focus:ring-2 focus:ring-blue-200"
+            disabled={isLoading || !!addressError || !contractAddress || !monthlyBid}
+            className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg hover:from-blue-700 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50 font-medium flex items-center justify-center gap-2"
           >
             {isLoading ? (
-              <Loader className="w-5 h-5 animate-spin" />
+              <>
+                <Loader className="w-4 h-4 animate-spin" />
+                Configuring...
+              </>
             ) : (
-              <CirclePlus className="w-5 h-5" />
+              <>
+                <CirclePlus className="w-4 h-4" />
+                Add Balance
+              </>
             )}
-            {isLoading ? "Adding..." : "Add"}
           </button>
+        </div>
+
+        {/* Info Section */}
+        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <Brain className="w-4 h-4 text-blue-400" />
+            <span className="text-sm font-semibold text-blue-300">AI Agent Configuration</span>
+          </div>
+          <p className="text-xs text-blue-200 leading-relaxed">
+            Your AI agent will automatically manage bidding for the specified contract using your monthly budget allocation.
+          </p>
         </div>
       </div>
       {/* Modal animation styles */}

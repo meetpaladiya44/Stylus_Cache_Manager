@@ -32,35 +32,35 @@ const CacheSavingsAnalysis: React.FC<CacheSavingsAnalysisProps> = ({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="group relative bg-white rounded-2xl p-8 shadow-lg border border-slate-200/60 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10"
+      className="group relative bg-zinc-800/50 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-zinc-700/60 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10"
       style={{ backgroundColor: hoverColor }}
     >
       <div className="flex items-center justify-between mb-8">
         <div className="space-y-1">
-          <h2 className="text-2xl font-bold text-slate-900">
+          <h2 className="text-2xl font-bold text-zinc-100">
             Cache Savings Analysis
           </h2>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-zinc-400">
             Real-time gas efficiency metrics
           </p>
         </div>
         <div className="flex flex-col sm:flex-row items-end gap-3">
           {loadingGasAnalysis && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-              <span className="text-sm font-medium text-blue-700">Analyzing...</span>
+            <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/30 rounded-xl">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
+              <span className="text-sm font-medium text-blue-300">Analyzing...</span>
             </div>
           )}
           {isIncrementalUpdate && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-xl">
-              <div className="animate-pulse w-2 h-2 bg-green-500 rounded-full"></div>
-              <span className="text-sm font-medium text-green-700">Live Update</span>
+            <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/30 rounded-xl">
+              <div className="animate-pulse w-2 h-2 bg-green-400 rounded-full"></div>
+              <span className="text-sm font-medium text-green-300">Live Update</span>
             </div>
           )}
           <button
             onClick={() => fetchProgramAddresses(true)}
             disabled={loadingGasAnalysis}
-            className="group relative px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-medium transition-all duration-300 hover:from-blue-700 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-500/25 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="group relative px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-medium transition-all duration-300 hover:from-blue-700 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-500/25 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 focus:ring-offset-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span className="text-sm">Refresh Analysis</span>
           </button>

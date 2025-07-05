@@ -3,7 +3,7 @@ import "../css/Landing.css";
 
 import React, { useState, useEffect } from 'react';
 import {
-  PieChart, Pie, LineChart, Line, XAxis, YAxis, CartesianGrid, 
+  PieChart, Pie, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, Cell
 } from 'recharts';
 import { ArrowUpCircle, Database, Box, Activity, Zap } from 'lucide-react';
@@ -14,7 +14,7 @@ const CacheManagerDashboard = () => {
     used: 75,
     available: 25
   });
-  
+
   const [timeSeriesData, setTimeSeriesData] = useState([
     { timestamp: '00:00', cacheSize: 50, entries: 5, minBid: 0.1 },
     { timestamp: '04:00', cacheSize: 60, entries: 7, minBid: 0.15 },
@@ -106,13 +106,13 @@ const CacheManagerDashboard = () => {
           </div>
           <div className="mt-4">
             <p className="text-sm">Optimization</p>
-            <div className="w-full bg-white/20 rounded-full h-2 mt-2">
+            <div className="w-full bg-zinc-800/30 rounded-full h-2 mt-2">
               <div className="bg-white rounded-full h-2 w-[95%]"></div>
             </div>
           </div>
         </div>
       </div>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Cache Usage Pie Chart */}
         <div className="bg-white p-6 rounded-xl shadow-lg">
@@ -232,7 +232,7 @@ const CacheManagerDashboard = () => {
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 placeholder="0x..."
                 value={bidForm.address}
-                onChange={(e) => setBidForm({...bidForm, address: e.target.value})}
+                onChange={(e) => setBidForm({ ...bidForm, address: e.target.value })}
               />
             </div>
             <div>
@@ -242,7 +242,7 @@ const CacheManagerDashboard = () => {
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 placeholder="0.0"
                 value={bidForm.amount}
-                onChange={(e) => setBidForm({...bidForm, amount: e.target.value})}
+                onChange={(e) => setBidForm({ ...bidForm, amount: e.target.value })}
               />
             </div>
             <button
@@ -260,7 +260,7 @@ const CacheManagerDashboard = () => {
             <div>
               <button
                 className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-md transition-colors"
-                onClick={() => {/* Add fetch logic */}}
+                onClick={() => {/* Add fetch logic */ }}
               >
                 Fetch Minimum Bid
               </button>
@@ -273,7 +273,7 @@ const CacheManagerDashboard = () => {
             <div>
               <button
                 className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-md transition-colors"
-                onClick={() => {/* Add fetch logic */}}
+                onClick={() => {/* Add fetch logic */ }}
               >
                 Fetch Smallest Entries
               </button>
@@ -281,7 +281,7 @@ const CacheManagerDashboard = () => {
             <div>
               <button
                 className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-md transition-colors"
-                onClick={() => {/* Add fetch logic */}}
+                onClick={() => {/* Add fetch logic */ }}
               >
                 Check if Paused
               </button>

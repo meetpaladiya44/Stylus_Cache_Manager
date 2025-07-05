@@ -783,17 +783,17 @@ const UserDashboard = () => {
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 flex items-center justify-center">
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-2xl border border-slate-200/60 p-12 w-full max-w-md text-center">
+      <div className="min-h-screen bg-zinc-900 flex items-center justify-center">
+        <div className="bg-zinc-800/80 backdrop-blur-sm rounded-2xl shadow-2xl border border-zinc-700/60 p-12 w-full max-w-md text-center">
           <div className="mb-6">
-            <Wallet className="w-20 h-20 mx-auto text-slate-400" />
+            <Wallet className="w-20 h-20 mx-auto text-zinc-400" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-4">Connect Your Wallet</h2>
-          <p className="text-slate-600 leading-relaxed">
+          <h2 className="text-2xl font-bold text-zinc-100 mb-4">Connect Your Wallet</h2>
+          <p className="text-zinc-400 leading-relaxed">
             Please connect your wallet to view your personalized bidding dashboard and track your transactions.
           </p>
-          <div className="mt-8 p-4 bg-blue-50 rounded-xl border border-blue-100">
-            <p className="text-sm text-blue-700">
+          <div className="mt-8 p-4 bg-blue-500/10 rounded-xl border border-blue-500/30">
+            <p className="text-sm text-blue-300">
               Your dashboard will show real-time bid history, analytics, and savings data.
             </p>
           </div>
@@ -809,39 +809,43 @@ const UserDashboard = () => {
         toastOptions={{
           duration: 4000,
           style: {
-            background: "#363636",
+            background: "#27272a",
             color: "#fff",
+            border: '1px solid #3f3f46',
           },
           success: {
             duration: 3000,
             style: {
-              background: "#10B981",
+              background: "#166534",
+              border: '1px solid #15803d',
             },
           },
           error: {
             duration: 5000,
             style: {
-              background: "#EF4444",
+              background: "#991b1b",
+              border: '1px solid #dc2626',
             },
           },
           loading: {
             style: {
-              background: "#3B82F6",
+              background: "#1e40af",
+              border: '1px solid #2563eb',
             },
           },
         }}
       />
 
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100">
+      <div className="min-h-screen bg-zinc-900">
         {/* Header Section */}
-        <div className="bg-white/60 backdrop-blur-sm border-b border-slate-200/60 sticky top-0 z-10">
+        <div className="bg-zinc-900/60 backdrop-blur-sm border-b border-zinc-800/60 sticky top-0 z-10">
           <div className="max-w-7xl mx-auto px-6 lg:px-8 py-6">
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div className="space-y-1">
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-zinc-100 to-zinc-300 bg-clip-text text-transparent">
                   My Bidding Dashboard
                 </h1>
-                <p className="text-slate-600">
+                <p className="text-zinc-400">
                   Track your bids and contracts on the Cache Manager
                 </p>
               </div>
@@ -859,64 +863,64 @@ const UserDashboard = () => {
         <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8 space-y-8">
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="group relative bg-white rounded-2xl p-8 shadow-lg border border-slate-200/60 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10 hover:-translate-y-1">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="group relative bg-zinc-800/50 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-zinc-700/60 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10 hover:-translate-y-1">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-blue-600/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <div className="relative">
                 <div className="flex items-start justify-between mb-6">
-                  <div className="p-4 bg-blue-100 rounded-xl group-hover:bg-blue-200 transition-colors duration-300">
-                    <Database className="w-8 h-8 text-blue-600" />
+                  <div className="p-4 bg-blue-500/10 rounded-xl group-hover:bg-blue-500/20 transition-colors duration-300 border border-blue-500/20">
+                    <Database className="w-8 h-8 text-blue-400" />
                   </div>
-                  <div className="flex items-center gap-1 px-3 py-1 bg-blue-100 rounded-full">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                    <span className="text-xs font-medium text-blue-700">Active</span>
+                  <div className="flex items-center gap-1 px-3 py-1 bg-blue-500/10 rounded-full border border-blue-500/20">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                    <span className="text-xs font-medium text-blue-300">Active</span>
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <p className="text-sm font-medium text-slate-600">Total Contracts</p>
-                  <h3 className="text-3xl font-bold text-slate-900">
+                  <p className="text-sm font-medium text-zinc-400">Total Contracts</p>
+                  <h3 className="text-3xl font-bold text-zinc-100">
                     {getUniqueContracts()}
                   </h3>
-                  <p className="text-sm text-slate-500">Contracts you've bid on</p>
+                  <p className="text-sm text-zinc-500">Contracts you've bid on</p>
                 </div>
               </div>
             </div>
 
-            <div className="group relative bg-white rounded-2xl p-8 shadow-lg border border-slate-200/60 transition-all duration-300 hover:shadow-xl hover:shadow-green-500/10 hover:-translate-y-1">
-              <div className="absolute inset-0 bg-gradient-to-br from-green-50 to-green-100/50 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="group relative bg-zinc-800/50 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-zinc-700/60 transition-all duration-300 hover:shadow-xl hover:shadow-green-500/10 hover:-translate-y-1">
+              <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-green-600/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <div className="relative">
                 <div className="flex items-start justify-between mb-6">
-                  <div className="p-4 bg-green-100 rounded-xl group-hover:bg-green-200 transition-colors duration-300">
-                    <TrendingUp className="w-8 h-8 text-green-600" />
+                  <div className="p-4 bg-green-500/10 rounded-xl group-hover:bg-green-500/20 transition-colors duration-300 border border-green-500/20">
+                    <TrendingUp className="w-8 h-8 text-green-400" />
                   </div>
-                  <div className="flex items-center gap-1 px-3 py-1 bg-green-100 rounded-full">
-                    <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-xs font-medium text-green-700">Tracked</span>
+                  <div className="flex items-center gap-1 px-3 py-1 bg-green-500/10 rounded-full border border-green-500/20">
+                    <CheckCircle className="w-3 h-3 text-green-400" />
+                    <span className="text-xs font-medium text-green-300">Tracked</span>
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <p className="text-sm font-medium text-slate-600">Total Bids</p>
-                  <h3 className="text-3xl font-bold text-slate-900">{userBids.length}</h3>
-                  <p className="text-sm text-slate-500">Bids successfully placed</p>
+                  <p className="text-sm font-medium text-zinc-400">Total Bids</p>
+                  <h3 className="text-3xl font-bold text-zinc-100">{userBids.length}</h3>
+                  <p className="text-sm text-zinc-500">Bids successfully placed</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Bids Table */}
-          <div className="bg-white rounded-2xl shadow-lg border border-slate-200/60 transition-all duration-300 hover:shadow-xl">
-            <div className="p-8 border-b border-slate-100">
+          <div className="bg-zinc-800/50 backdrop-blur-sm rounded-2xl shadow-lg border border-zinc-700/60 transition-all duration-300 hover:shadow-xl">
+            <div className="p-8 border-b border-zinc-700/50">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
-                    <Clock className="w-6 h-6 text-blue-600" />
+                  <h2 className="text-2xl font-bold text-zinc-100 flex items-center gap-3">
+                    <Clock className="w-6 h-6 text-blue-400" />
                     Your Bid History
                   </h2>
-                  <p className="text-sm text-slate-600">Complete transaction history with analytics</p>
+                  <p className="text-sm text-zinc-400">Complete transaction history with analytics</p>
                 </div>
                 {userBids.length > 0 && (
-                  <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <span className="text-slate-700 text-sm font-medium">{userBids.length} transactions</span>
+                  <div className="flex items-center gap-2 px-3 py-2 bg-zinc-700/50 border border-zinc-600/50 rounded-lg">
+                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                    <span className="text-zinc-300 text-sm font-medium">{userBids.length} transactions</span>
                   </div>
                 )}
               </div>
@@ -924,17 +928,17 @@ const UserDashboard = () => {
             <div className="p-8">
               {loading ? (
                 <div className="text-center py-12">
-                  <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"></div>
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-500/10 rounded-full mb-4">
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-400 border-t-transparent"></div>
                   </div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                  <h3 className="text-lg font-semibold text-zinc-100 mb-2">
                     {loadStats.userEvents === 0
                       ? "Scanning recent blocks for your bids..."
                       : loadStats.userEvents > 0
                         ? `Found ${loadStats.userEvents} bids! Loading details...`
                         : "Performing comprehensive blockchain scan..."}
                   </h3>
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-zinc-400">
                     {userBids.length === 0 && loadStats.totalEvents > 0
                       ? "If no recent bids found, automatically scanning all historical blocks..."
                       : "This might take a while for comprehensive scanning"}
@@ -942,11 +946,11 @@ const UserDashboard = () => {
                 </div>
               ) : error ? (
                 <div className="text-center py-12">
-                  <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mb-4">
-                    <Database className="w-8 h-8 text-red-500" />
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-red-500/10 rounded-full mb-4 border border-red-500/20">
+                    <Database className="w-8 h-8 text-red-400" />
                   </div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">Error Loading Data</h3>
-                  <p className="text-red-600 mb-4">{error}</p>
+                  <h3 className="text-lg font-semibold text-zinc-100 mb-2">Error Loading Data</h3>
+                  <p className="text-red-400 mb-4">{error}</p>
                   <button
                     onClick={fetchInitialUserBids}
                     className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-xl hover:from-blue-700 hover:to-blue-600 transition-all shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
@@ -956,54 +960,54 @@ const UserDashboard = () => {
                 </div>
               ) : userBids.length === 0 ? (
                 <div className="text-center py-12">
-                  <div className="inline-flex items-center justify-center w-16 h-16 bg-slate-100 rounded-full mb-4">
-                    <Database className="w-8 h-8 text-slate-400" />
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-zinc-700/50 rounded-full mb-4 border border-zinc-600/50">
+                    <Database className="w-8 h-8 text-zinc-400" />
                   </div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">No Bids Found</h3>
-                  <p className="text-slate-600 mb-4">
+                  <h3 className="text-lg font-semibold text-zinc-100 mb-2">No Bids Found</h3>
+                  <p className="text-zinc-400 mb-4">
                     You haven't placed any bids in the recent blocks or none were found.
                   </p>
-                  <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 inline-block">
-                    <p className="text-sm text-blue-700">
+                  <div className="p-4 bg-blue-500/10 rounded-xl border border-blue-500/30 inline-block">
+                    <p className="text-sm text-blue-300">
                       Start by placing your first bid in the Cache Manager
                     </p>
                   </div>
                 </div>
               ) : (
                 <>
-                  <div className="overflow-hidden rounded-xl border border-slate-200">
+                  <div className="overflow-hidden rounded-xl border border-zinc-700">
                     <table className="w-full">
-                      <thead className="bg-slate-50 border-b border-slate-200">
+                      <thead className="bg-zinc-700/30 border-b border-zinc-600/50">
                         <tr>
-                          <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">
+                          <th className="text-left py-4 px-6 font-semibold text-zinc-300 text-sm uppercase tracking-wider">
                             Contract Address
                           </th>
-                          <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">
+                          <th className="text-left py-4 px-6 font-semibold text-zinc-300 text-sm uppercase tracking-wider">
                             Bid Amount
                           </th>
-                          <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">
+                          <th className="text-left py-4 px-6 font-semibold text-zinc-300 text-sm uppercase tracking-wider">
                             Bid Savings
                           </th>
-                          <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">
+                          <th className="text-left py-4 px-6 font-semibold text-zinc-300 text-sm uppercase tracking-wider">
                             Size
                           </th>
-                          <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">
+                          <th className="text-left py-4 px-6 font-semibold text-zinc-300 text-sm uppercase tracking-wider">
                             Timestamp
                           </th>
-                          <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">
+                          <th className="text-left py-4 px-6 font-semibold text-zinc-300 text-sm uppercase tracking-wider">
                             Transaction
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-slate-100">
+                      <tbody className="bg-zinc-800/30 divide-y divide-zinc-700/50">
                         {userBids.map((bid, index) => (
                           <tr
                             key={index}
-                            className={`transition-colors duration-200 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover:bg-blue-50/60`}
+                            className={`transition-colors duration-200 ${index % 2 === 0 ? 'bg-zinc-800/20' : 'bg-zinc-700/20'} hover:bg-blue-500/10`}
                           >
                             <td className="py-4 px-6">
                               <div className="flex items-center gap-3">
-                                <code className="text-sm bg-slate-100 px-3 py-2 rounded-lg font-mono border">
+                                <code className="text-sm bg-zinc-700/50 px-3 py-2 rounded-lg font-mono border border-zinc-600/50 text-zinc-300">
                                   {formatAddress(bid.args.program)}
                                 </code>
                                 <button
@@ -1015,35 +1019,35 @@ const UserDashboard = () => {
                                       "Contract address copied to clipboard!"
                                     );
                                   }}
-                                  className="text-blue-500 hover:text-blue-700 text-xs transition-colors px-2 py-1 rounded hover:bg-blue-50"
+                                  className="text-blue-400 hover:text-blue-300 text-xs transition-colors px-2 py-1 rounded hover:bg-blue-500/10 border border-transparent hover:border-blue-500/30"
                                 >
                                   Copy
                                 </button>
                               </div>
                             </td>
                             <td className="py-4 px-6">
-                              <span className="inline-block bg-gradient-to-r from-blue-50 to-blue-100 text-blue-800 px-3 py-2 rounded-full text-sm font-semibold border border-blue-200">
+                              <span className="inline-block bg-gradient-to-r from-blue-500/10 to-blue-600/10 text-blue-300 px-3 py-2 rounded-full text-sm font-semibold border border-blue-500/30">
                                 {bid.args.bid.toString()}
                               </span>
                             </td>
                             <td className="py-4 px-6">
                               <span
                                 className={`inline-block px-3 py-2 rounded-full text-sm font-semibold border ${!minBidFromEntries
-                                  ? "bg-slate-100 text-slate-800 border-slate-200"
+                                  ? "bg-zinc-600/30 text-zinc-300 border-zinc-500/30"
                                   : bid.args.bid === minBidFromEntries
-                                    ? "bg-green-100 text-green-800 border-green-200"
+                                    ? "bg-green-500/10 text-green-300 border-green-500/30"
                                     : bid.args.bid > minBidFromEntries
-                                      ? "bg-yellow-100 text-yellow-800 border-yellow-200"
-                                      : "bg-blue-100 text-blue-800 border-blue-200"
+                                      ? "bg-yellow-500/10 text-yellow-300 border-yellow-500/30"
+                                      : "bg-blue-500/10 text-blue-300 border-blue-500/30"
                                   }`}
                               >
                                 {calculateBidSavings(bid.args.bid)}
                               </span>
                             </td>
-                            <td className="py-4 px-6 text-slate-600 font-medium">
+                            <td className="py-4 px-6 text-zinc-400 font-medium">
                               {bid.args.size.toString()} bytes
                             </td>
-                            <td className="py-4 px-6 text-sm text-slate-600">
+                            <td className="py-4 px-6 text-sm text-zinc-400">
                               {formatTimestamp(bid.timestamp)}
                             </td>
                             <td className="py-4 px-6">
@@ -1051,7 +1055,7 @@ const UserDashboard = () => {
                                 href={`https://sepolia.arbiscan.io/tx/${bid.transactionHash}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-blue-500 hover:text-blue-700 text-sm transition-colors px-2 py-1 rounded hover:bg-blue-50"
+                                className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 text-sm transition-colors px-2 py-1 rounded hover:bg-blue-500/10 border border-transparent hover:border-blue-500/30"
                               >
                                 View on Arbiscan
                                 <ChevronRight className="w-3 h-3" />
@@ -1069,7 +1073,7 @@ const UserDashboard = () => {
                       <button
                         onClick={fetchMoreUserBids}
                         disabled={loadingMore}
-                        className="px-6 py-3 bg-gradient-to-r from-slate-600 to-slate-500 text-white rounded-xl hover:from-slate-700 hover:to-slate-600 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                        className="px-6 py-3 bg-gradient-to-r from-zinc-700 to-zinc-600 text-white rounded-xl hover:from-zinc-600 hover:to-zinc-500 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-zinc-400 border border-zinc-600/50"
                       >
                         {loadingMore ? (
                           <>
