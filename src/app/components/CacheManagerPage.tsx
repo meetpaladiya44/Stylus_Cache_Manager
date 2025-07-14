@@ -1035,27 +1035,97 @@ const CacheManagerPage = () => {
         throw new Error("Bid amount must be greater than zero");
       }
 
-      toast.loading("Placing bid...", { id: "place-bid" });
+      toast.loading("Analyzing contract and placing bid...", { id: "place-bid" });
 
       const provider = await getProvider();
       await provider.send("eth_requestAccounts", []);
+      const signer = await provider.getSigner();
+      const walletAddress = await signer.getAddress();
 
+      // Get network information
+      const network = await provider.getNetwork();
+      const networkName = network.name === "arbitrum-sepolia" ? "arbitrum-sepolia" : network.name;
+
+      // ARB_WASM precompile configuration for gas analysis
+      const arbWasmAddress = "0x0000000000000000000000000000000000000071";
+      const arbWasmAbi = ["function programInitGas(address) view returns (uint64, uint64)"];
+      const arbWasm = new ethers.Contract(arbWasmAddress, arbWasmAbi, provider);
+
+      // Get gas analysis before placing bid
+      let gasSaved = "0";
+      try {
+        const [gas, gasWhenCached] = await arbWasm.programInitGas(contractAddress);
+        gasSaved = (gas - gasWhenCached).toString();
+        console.log(`Gas analysis: ${gas} → ${gasWhenCached} (saved: ${gasSaved})`);
+      } catch (gasError: any) {
+        console.log(`Could not get gas data: ${gasError.message}`);
+        console.log(`Contract might not be a Stylus contract or doesn't exist`);
+      }
+
+      // Get minimum bid from contract
       const contract = await getContract();
+      let minBidRequired = "0.0";
+      try {
+        const minBid = await contract.getMinBid(contractAddress);
+        minBidRequired = ethers.formatEther(minBid);
+        console.log(`Min bid required: ${minBidRequired} ETH`);
+      } catch (minBidError: any) {
+        console.log(`Could not get minimum bid: ${minBidError.message}`);
+      }
 
+      // Place the bid
       const tx = await contract.placeBid(contractAddress, {
         value: ethers.parseEther(bidAmount).toString(),
         gasLimit: 3000000,
       });
 
-      await tx.wait();
-      toast.success("Bid placed successfully!", { id: "place-bid" });
+      console.log(`Transaction sent: ${tx.hash}`);
+      console.log(`Waiting for confirmation...`);
 
-      // Clear form
-      setContractAddress("");
-      setBidAmount("");
+      const receipt = await tx.wait();
+      const gasUsed = receipt.gasUsed.toString();
 
-      // Refresh the entries after successful bid
-      await fetchEntries();
+      if (receipt.status === 1) {
+        // Store bid data in MongoDB
+        try {
+          const bidData = {
+            contractAddress,
+            deployedBy: walletAddress,
+            network: networkName,
+            minBidRequired,
+            gasSaved,
+            gasUsed,
+            txHash: tx.hash
+          };
+
+          const response = await fetch("/api/bid", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(bidData),
+          });
+
+          if (response.ok) {
+            console.log("Bid data stored successfully in MongoDB");
+          } else {
+            console.warn("Failed to store bid data in MongoDB");
+          }
+        } catch (dbError) {
+          console.warn("Error storing bid data:", dbError);
+        }
+
+        toast.success("Bid placed successfully!", { id: "place-bid" });
+
+        // Clear form
+        setContractAddress("");
+        setBidAmount("");
+
+        // Refresh the entries after successful bid
+        await fetchEntries();
+      } else {
+        throw new Error("Transaction failed");
+      }
     } catch (error: any) {
       console.error("Error placing bid:", error);
 
