@@ -9,7 +9,6 @@ import {
 } from "@/utils/CacheManagerUtils";
 import { useRouter } from "next/navigation";
 import ConfigureAIModal from "./ConfigureAIModal ";
-import { ConnectKitButton } from "connectkit";
 import Image from "next/image";
 import { toast, Toaster } from "react-hot-toast";
 import { cacheManagerConfig } from "@/config/CacheManagerConfig";
@@ -20,6 +19,7 @@ import CacheSavingsAnalysis from "./ui/CacheSavingsAnalysis";
 import CacheEntriesTable from "./ui/CacheEntriesTable";
 import CacheSizeDistributionChart from "./ui/CacheSizeDistributionChart";
 import ContractEntriesChart from "./ui/ContractEntriesChart";
+import { ConnectWallet } from "./ConnectWallet/ConnectWallet";
 import MinBidChart from "./ui/MinBidChart";
 import PlaceBidForm from "./ui/PlaceBidForm";
 import FetchSmallestEntries from "./ui/FetchSmallestEntries";
@@ -1385,7 +1385,7 @@ const CacheManagerPage = () => {
               <div className="z-10 relative group w-fit mx-auto">
                 <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl blur opacity-20 group-hover:opacity-40 transition duration-300"></div>
                 <div className="relative bg-zinc-800/80 border border-zinc-700/50 rounded-xl p-0.5">
-                  <ConnectKitButton />
+                  <ConnectWallet />
                 </div>
               </div>
             </div>
@@ -1395,7 +1395,7 @@ const CacheManagerPage = () => {
         // Render the full component when connected
         <div className="min-h-screen bg-zinc-900">
           {/* Header Section */}
-          <CacheManagerHeader isConnected={isConnected} setIsModalOpen={setIsModalOpen} ConnectKitButton={ConnectKitButton} />
+          <CacheManagerHeader isConnected={isConnected} setIsModalOpen={setIsModalOpen} ConnectKitButton={ConnectWallet} />
 
           {/* Main Content */}
           <div className="px-6 lg:px-8 py-8 space-y-8">
