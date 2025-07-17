@@ -70,7 +70,7 @@ export function ConnectWallet() {
     const hasSocialLogin = user?.google || user?.farcaster;
 
     if (hasSocialLogin) {
-      if (displayAddress !== address) setDisplayAddress(address);
+      setDisplayAddress(address);
       return;
     }
 
@@ -80,19 +80,17 @@ export function ConnectWallet() {
     );
 
     if (realWallet) {
-      if (displayAddress !== realWallet.address) setDisplayAddress(realWallet.address);
+      setDisplayAddress(realWallet.address);
     } else {
-      if (displayAddress !== null) setDisplayAddress(null);
+      setDisplayAddress(null);
       if (
         !hasSocialLogin &&
-        wallets.length > 0 &&
-        wallets.every((wallet) => wallet.walletClientType === "privy") &&
-        isConnected
+        wallets.every((wallet) => wallet.walletClientType === "privy")
       ) {
         wagmiDisconnect();
       }
     }
-  }, [wallets, address, user, isConnected]);
+  }, [wallets, address, user]);
 
   // Utility Functions
   const handleCopyAddress = () => {

@@ -4,6 +4,8 @@ import "./globals.css";
 import RootProvider from "./providers/RootProvider";
 import Footer from "./components/Footer";
 import Navbar from "./components/Navbar";
+import FeedbackModal from './components/FeedbackModal'
+import { Toaster } from 'react-hot-toast'
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -24,6 +26,8 @@ export default function RootLayout({
           <Navbar />
           {children}
           <Footer />
+          <FeedbackModal />
+          <Toaster position="top-center" />
         </RootProvider>
       </body>
     </html>

@@ -19,19 +19,9 @@ interface Web3ProviderProps {
   autoConnect?: boolean;
 }
 
-// Get and validate Privy App ID
-const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
-
-if (!privyAppId) {
-  console.error("❌ NEXT_PUBLIC_PRIVY_APP_ID is not set in environment variables");
-  throw new Error("Missing NEXT_PUBLIC_PRIVY_APP_ID environment variable");
-}
-
-console.log("✅ Privy App ID found:", privyAppId.slice(0, 8) + "...");
-
 // Wagmi configuration
 const wagmiConfig = createConfig({
-  chains: [arbitrumSepolia, optimism, arbitrum, optimismSepolia, mainnet],
+  chains: [optimism, arbitrum, arbitrumSepolia, optimismSepolia, mainnet],
   transports: {
     [mainnet.id]: http(),
     [optimism.id]: http(),
@@ -53,22 +43,15 @@ const privyConfig: PrivyClientConfig = {
     showWalletLoginFirst: true,
     logo: "",
   },
-  defaultChain: arbitrumSepolia, // Changed to match your app's network
+  defaultChain: optimism,
 };
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: false,
-    },
-  },
-});
+const queryClient = new QueryClient();
 
 export default function Web3Provider({ children }: Web3ProviderProps) {
   return (
     <PrivyProvider
-      appId={privyAppId as string}
+      appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID as string}
       config={privyConfig}
     >
       <QueryClientProvider client={queryClient}>
