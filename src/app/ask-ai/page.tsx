@@ -32,6 +32,7 @@ import ConfigureAIModal from "../components/ConfigureAIModal ";
 
 import { DashboardData } from "../../../types";
 import { BrowserProvider } from "ethers";
+import { useAccount } from "wagmi";
 
 type FullDashboardData = DashboardData & {
   recentPredictions: Array<{
@@ -63,16 +64,21 @@ const AIAgentDashboard = () => {
     null
   );
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // Move the useAccount hook to the top level of the component
+  const { address: walletAddress } = useAccount();
   // const [provider, setProvider] = useState<BrowserProvider | null>(null);
-  const provider = new BrowserProvider(window.ethereum);
+  // const provider = new BrowserProvider(window?.ethereum);
 
   const fetchDashboardData = async () => {
     try {
       // Get the current wallet address
-      console.log("before signer");
-      const signer = await provider.getSigner();
-      console.log("after signer");
-      const walletAddress = await signer.getAddress();
+      // console.log("before signer");
+      // const signer = await provider.getSigner();
+      // console.log("after signer");
+      // const walletAddress = await signer.getAddress();
+      
+      // Use the walletAddress from the hook
       console.log("address", walletAddress);
 
       const response = await fetch("/api/dashboard", {
@@ -94,7 +100,7 @@ const AIAgentDashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+  }, [walletAddress]); // Add walletAddress as a dependency so it refetches when the address changes
 
   const handleDataUpdate = (newData: DashboardData) => {
     if (dashboardData) {
@@ -131,7 +137,7 @@ const AIAgentDashboard = () => {
   return (
     <div className="min-h-screen bg-zinc-900">
       {/* Header Section */}
-      <div className="bg-zinc-900/60 backdrop-blur-sm border-b border-zinc-800/60 sticky top-0 z-10">
+      <div className="bg-zinc-900/60 border-b border-zinc-800/60">
         <div className="px-6 lg:px-8 py-6">
           <div className="flex justify-between items-center">
             <div className="space-y-1">
