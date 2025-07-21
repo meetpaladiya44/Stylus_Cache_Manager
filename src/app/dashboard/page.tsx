@@ -804,41 +804,9 @@ const UserDashboard = () => {
 
   return (
     <>
-      <Toaster
-        position="top-center"
-        toastOptions={{
-          duration: 4000,
-          style: {
-            background: "#27272a",
-            color: "#fff",
-            border: '1px solid #3f3f46',
-          },
-          success: {
-            duration: 3000,
-            style: {
-              background: "#166534",
-              border: '1px solid #15803d',
-            },
-          },
-          error: {
-            duration: 5000,
-            style: {
-              background: "#991b1b",
-              border: '1px solid #dc2626',
-            },
-          },
-          loading: {
-            style: {
-              background: "#1e40af",
-              border: '1px solid #2563eb',
-            },
-          },
-        }}
-      />
-
       <div className="min-h-screen bg-zinc-900">
         {/* Header Section */}
-        <div className="bg-zinc-900/60 backdrop-blur-sm border-b border-zinc-800/60 sticky top-0 z-10">
+        <div className="bg-zinc-900/60 border-b border-zinc-800/60">
           <div className="max-w-7xl mx-auto px-6 lg:px-8 py-6">
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div className="space-y-1">
@@ -1095,6 +1063,38 @@ const UserDashboard = () => {
             </div>
           </div>
         </div>
+
+        <Toaster
+          position="top-center"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: "#27272a",
+              color: "#fff",
+              border: '1px solid #3f3f46',
+            },
+            success: {
+              duration: 3000,
+              style: {
+                background: "#166534",
+                border: '1px solid #15803d',
+              },
+            },
+            error: {
+              duration: 5000,
+              style: {
+                background: "#991b1b",
+                border: '1px solid #dc2626',
+              },
+            },
+            loading: {
+              style: {
+                background: "#1e40af",
+                border: '1px solid #2563eb',
+              },
+            },
+          }}
+        />
       </div>
     </>
   );

@@ -4,11 +4,10 @@ import { WalletMinimal } from "lucide-react";
 interface CacheManagerHeaderProps {
   isConnected: boolean;
   setIsModalOpen: (open: boolean) => void;
-  ConnectKitButton: React.ElementType;
 }
 
-const CacheManagerHeader: React.FC<CacheManagerHeaderProps> = ({ isConnected, setIsModalOpen, ConnectKitButton }) => (
-  <div className="bg-zinc-900/90 backdrop-blur-sm border-b border-zinc-800/60 sticky top-0 z-40">
+const CacheManagerHeader: React.FC<CacheManagerHeaderProps> = ({ isConnected, setIsModalOpen }) => (
+  <div className="bg-zinc-900/90 border-b border-zinc-800/60 ">
     <div className="px-6 lg:px-8 py-6">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div className="space-y-2">
@@ -26,7 +25,7 @@ const CacheManagerHeader: React.FC<CacheManagerHeaderProps> = ({ isConnected, se
           </div>
           <button
             onClick={() => setIsModalOpen(true)}
-            className="group relative px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-medium transition-all duration-300 hover:from-blue-700 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-500/25 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 focus:ring-offset-zinc-900"
+            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-medium transition-all duration-300 hover:from-blue-700 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-500/25 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 focus:ring-offset-zinc-900"
           >
             <div className="flex items-center gap-2">
               <WalletMinimal className="w-5 h-5 transition-transform group-hover:scale-110" />
