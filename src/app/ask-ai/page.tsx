@@ -81,7 +81,7 @@ const AIAgentDashboard = () => {
       // Use the walletAddress from the hook
       console.log("address", walletAddress);
 
-      const response = await fetch("/api/dashboard", {
+      const response = await fetch("/api/profile", {
         headers: {
           "Content-Type": "application/json",
           ...(walletAddress && { "x-wallet-address": walletAddress }),

@@ -1,87 +1,127 @@
-// app/api/dashboard/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-import { getUserDashboardData, saveUserDashboardData } from '../../../../lib/mongodb';
+import { NextRequest, NextResponse } from "next/server";
+import { getMongoClient } from "@/lib/mongodb";
 
-export async function GET(req: NextRequest) {
-  const walletAddress = req.headers.get('x-wallet-address');
-  
-  if (!walletAddress) {
-    // Return default data if no wallet address is provided
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APIS_DATA_ENDPOINT}/dashboard-data`, {
-      headers: {
-        'x-api-key': process.env.NEXT_PUBLIC_CALCULATION_API_KEY || '',
-      },
-    });
-    
-    const defaultData = await response.json();
-    return NextResponse.json(defaultData);
-  }
-
-  try {
-    // Try to get user-specific data from MongoDB
-    const userData = await getUserDashboardData(walletAddress);
-    
-    if (userData) {
-      return NextResponse.json(userData);
-    }
-
-    console.log("userData", userData);
-    
-    // If no user data exists, return default data
-    const key = process.env.NEXT_PUBLIC_CALCULATION_API_KEY;
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APIS_DATA_ENDPOINT}/dashboard-data`, {
-      headers: {
-        ...(key && { "x-api-key": key }),
-      },
-    });
-    
-    const defaultData = await response.json();
-    return NextResponse.json(defaultData);
-  } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch dashboard data' },
-      { status: 500 }
-    );
-  }
+interface Contract {
+  _id?: string;
+  contractAddress: string;
+  network: string;
+  gasSaved: number;
+  minBidRequired: number;
+  deployedAt: string;
 }
 
-export async function POST(req: NextRequest) {
-  const walletAddress = req.headers.get('x-wallet-address');
-  
-  if (!walletAddress) {
-    return NextResponse.json(
-      { error: 'Wallet address is required' },
-      { status: 400 }
-    );
-  }
+interface Stats {
+  totalGasSaved: number;
+  totalContracts: number;
+  avgMinBid: number;
+  networks: string[];
+}
 
+interface LeaderboardResponse {
+  success: boolean;
+  data?: Contract[];
+  stats?: Stats;
+  networks?: string[];
+  pagination?: {
+    total: number;
+    limit: number;
+    hasMore: boolean;
+  };
+  error?: string;
+  message?: string;
+}
+
+export async function GET(
+  request: NextRequest
+): Promise<NextResponse<LeaderboardResponse>> {
   try {
-    const body = await req.json();
-    const { bidAmount } = body;
+    const client = await getMongoClient();
+    const db = client.db("smartcache");
+    const collection = db.collection<Contract>("contracts");
 
-    // Call the calculation API
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APIS_DATA_ENDPOINT}/calculate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.NEXT_PUBLIC_CALCULATION_API_KEY || '',
-      },
-      body: JSON.stringify({ bidAmount }),
-    });
+    // Get search parameters
+    const { searchParams } = new URL(request.url);
+    const network = searchParams.get("network") || "all";
+    const sortBy = searchParams.get("sortBy") || "gasSaved";
+    const sortOrder = searchParams.get("sortOrder") || "desc";
+    const limit = parseInt(searchParams.get("limit") || "100");
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch AI metrics');
+    // Build query filter
+    const query: { network?: string } = {};
+    if (network !== "all") {
+      query.network = network;
     }
 
-    const metrics = await response.json();
-    
-    // Save the metrics to MongoDB
-    await saveUserDashboardData(walletAddress, metrics);
+    // Build sort object
+    let sortObj: { [key: string]: 1 | -1 } = {};
+    if (sortBy === "gasSaved") {
+      sortObj.gasSaved = sortOrder === "desc" ? -1 : 1;
+    } else if (sortBy === "minBidRequired") {
+      sortObj.minBidRequired = sortOrder === "desc" ? -1 : 1;
+    } else if (sortBy === "deployedAt") {
+      sortObj.deployedAt = sortOrder === "desc" ? -1 : 1;
+    } else {
+      sortObj.gasSaved = -1; // Default sort by gas saved descending
+    }
 
-    return NextResponse.json(metrics);
+    // Execute query with sorting and limit
+    const contracts = await collection
+      .find(query)
+      .sort(sortObj)
+      .limit(limit)
+      .toArray();
+
+    // Get total count for pagination (without limit)
+    const totalCount = await collection.countDocuments(query);
+
+    // Calculate aggregated stats based on the current filter
+    const statsAggregation = [
+      ...(network !== "all" ? [{ $match: { network } }] : []),
+      {
+        $group: {
+          _id: null,
+          totalGasSaved: { $sum: { $toInt: "$gasSaved" } },
+          totalContracts: { $sum: 1 },
+          avgMinBid: { $avg: { $toDouble: "$minBidRequired" } },
+          networks: { $addToSet: "$network" },
+        },
+      },
+    ];
+
+    const stats = await collection.aggregate<Stats>(statsAggregation).toArray();
+
+    const aggregatedStats: Stats = stats[0] || {
+      totalGasSaved: 0,
+      totalContracts: 0,
+      avgMinBid: 0,
+      networks: [],
+    };
+
+    // Get all available networks (this should always show all networks regardless of filter)
+    const allNetworks = await collection.distinct("network");
+
+    return NextResponse.json({
+      success: true,
+      data: contracts,
+      stats: aggregatedStats,
+      networks: allNetworks,
+      pagination: {
+        total: totalCount,
+        limit,
+        hasMore: totalCount > limit,
+      },
+    });
   } catch (error) {
+    console.error("API Error:", error);
     return NextResponse.json(
-      { error: 'Failed to process calculation' },
+      {
+        success: false,
+        error: "Internal server error",
+        message:
+          process.env.NODE_ENV === "development"
+            ? (error as Error).message
+            : "Database error",
+      },
       { status: 500 }
     );
   }

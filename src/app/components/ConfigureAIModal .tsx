@@ -114,7 +114,7 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
 
       if (shouldUpdateData) {
         // Call API with wallet address
-        const response = await fetch("/api/dashboard", {
+        const response = await fetch("/api/profile", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

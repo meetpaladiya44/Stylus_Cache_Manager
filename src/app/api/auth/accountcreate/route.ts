@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
 
       // Connect to database
       client = await getMongoClient();
-      const db = client.db("dashboard");
+      const db = client.db("smartcache");
       const collection = db.collection("users");
 
       // Check if delegate already exists
