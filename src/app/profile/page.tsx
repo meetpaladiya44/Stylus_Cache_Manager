@@ -14,6 +14,8 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { toast, Toaster } from "react-hot-toast";
+import { getContract, getNetworkKeyByChainId } from "@/utils/CacheManagerUtils";
+import { ConnectWallet } from "../components/ConnectWallet/ConnectWallet";
 
 // Cache keys
 const CACHE_KEY_BIDS = "user_bids_cache_";
@@ -55,6 +57,29 @@ interface CacheData {
   earliestFetchedBlock: string;
 }
 
+// Add a hook to detect the current network
+function useNetworkKey() {
+  const [networkKey, setNetworkKey] = useState<"arbitrum_sepolia" | "arbitrum_one">("arbitrum_sepolia");
+  useEffect(() => {
+    async function detectNetwork() {
+      if (typeof window !== "undefined" && (window as any).ethereum) {
+        const provider = (window as any).ethereum;
+        const chainIdHex = await provider.request({ method: "eth_chainId" });
+        const chainId = parseInt(chainIdHex, 16);
+        const key = getNetworkKeyByChainId(chainId) || "arbitrum_sepolia";
+        setNetworkKey(key as "arbitrum_sepolia" | "arbitrum_one");
+      }
+    }
+    detectNetwork();
+    if (typeof window !== "undefined" && (window as any).ethereum) {
+      (window as any).ethereum.on("chainChanged", () => {
+        detectNetwork();
+      });
+    }
+  }, []);
+  return networkKey;
+}
+
 const UserDashboard = () => {
   const { address, isConnected } = useAccount();
   const publicClient = usePublicClient();
@@ -83,13 +108,13 @@ const UserDashboard = () => {
     null
   );
 
-  const config = cacheManagerConfig.arbitrum_one;
+  const networkKey = useNetworkKey();
+  const config = cacheManagerConfig[networkKey];
 
   // Function to fetch all entries from contract
   const fetchAllEntries = async () => {
     try {
-      const { getContract } = await import("@/utils/CacheManagerUtils");
-      const contract = await getContract();
+      const contract = await getContract(networkKey);
       const rawEntries = await contract.getEntries();
 
       // Format entries similar to CacheManagerPage
@@ -792,6 +817,9 @@ const UserDashboard = () => {
           <p className="text-zinc-400 leading-relaxed">
             Please connect your wallet to view your personalized bidding dashboard and track your transactions.
           </p>
+          <div className="mt-8 flex justify-center">
+            <ConnectWallet />
+          </div>
           <div className="mt-8 p-4 bg-blue-500/10 rounded-xl border border-blue-500/30">
             <p className="text-sm text-blue-300">
               Your dashboard will show real-time bid history, analytics, and savings data.

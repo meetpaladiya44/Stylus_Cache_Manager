@@ -1,11 +1,17 @@
 import { ethers, BrowserProvider, Eip1193Provider } from "ethers";
 import { cacheManagerConfig } from "@/config/CacheManagerConfig";
 
+export const getNetworkKeyByChainId = (chainId: number) => {
+  if (chainId === 421614) return "arbitrum_sepolia";
+  if (chainId === 42161) return "arbitrum_one";
+  return null;
+};
+
 export const checkNetwork = async (provider: ethers.BrowserProvider) => {
   const network = await provider.getNetwork();
-  const requiredChainId = 421614; // Sepolia testnet
-  if (Number(network.chainId) !== requiredChainId) {
-    throw new Error(`Please switch to Sepolia testnet`);
+  const chainId = Number(network.chainId);
+  if (chainId !== 421614 && chainId !== 42161) {
+    throw new Error(`Please switch to Arbitrum Sepolia or Arbitrum One mainnet`);
   }
 };
 
@@ -19,18 +25,16 @@ export const getProvider = async () => {
   }
 };
 
-// Initialize Contract
-export const getContract = async () => {
-  console.log("inside get contract");
-
+// Initialize Contract for a given network key
+export const getContract = async (networkKey: "arbitrum_sepolia" | "arbitrum_one") => {
   const provider = await getProvider();
   const signer = await provider.getSigner();
+  const config = cacheManagerConfig[networkKey];
   const contract = new ethers.Contract(
-    cacheManagerConfig.arbitrum_one.contracts.cacheManager.address,
-    cacheManagerConfig.arbitrum_one.contracts.cacheManager.abi,
+    config.contracts.cacheManager.address,
+    config.contracts.cacheManager.abi,
     signer
   );
-  console.log("contract::", contract);
   return contract;
 };
 

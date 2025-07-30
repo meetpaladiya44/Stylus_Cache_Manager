@@ -6,6 +6,7 @@ import { ethers } from "ethers";
 import {
   getContract,
   getProvider,
+  getNetworkKeyByChainId,
 } from "@/utils/CacheManagerUtils";
 import { useRouter } from "next/navigation";
 import ConfigureAIModal from "./ConfigureAIModal ";
@@ -82,7 +83,90 @@ type FullDashboardData = DashboardData & {
   }>;
 };
 
-const CacheManagerPage = () => {
+interface CacheManagerPageProps {
+  networkKey?: "arbitrum_sepolia" | "arbitrum_one";
+}
+
+// Add retry utility function at the top
+const retryWithBackoff = async (
+  fn: () => Promise<any>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<any> => {
+  let lastError: any;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      console.log(`Attempt ${attempt + 1} failed:`, error.message);
+      
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      // Exponential backoff
+      const delay = baseDelay * Math.pow(2, attempt);
+      console.log(`Retrying in ${delay}ms...`);
+      await new Promise((resolve: any) => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError;
+};
+
+// Add contract call wrapper with validation
+const safeContractCall = async (
+  contract: any,
+  methodName: string,
+  args: any[] = [],
+  defaultValue: any
+): Promise<any> => {
+  try {
+    console.log(`🔍 Calling ${methodName} with args:`, args);
+    
+    const result = await retryWithBackoff(async () => {
+      const method = contract[methodName];
+      if (!method) {
+        throw new Error(`Method ${methodName} not found on contract`);
+      }
+      
+      const response = await method(...args);
+      
+      // Validate response
+      if (response === null || response === undefined) {
+        throw new Error(`Method ${methodName} returned null/undefined`);
+      }
+      
+      // Check if response is empty bytes (0x)
+      if (typeof response === 'string' && response === '0x') {
+        throw new Error(`Method ${methodName} returned empty data (0x)`);
+      }
+      
+      return response;
+    });
+    
+    console.log(`✅ ${methodName} successful:`, result);
+    return result;
+  } catch (error: any) {
+    console.error(`❌ ${methodName} failed:`, error.message);
+    
+    // Log specific error details for debugging
+    if (error.message.includes('could not decode result data')) {
+      console.error(`🔍 Decode error details:`, {
+        method: methodName,
+        args,
+        error: error.message,
+        code: error.code
+      });
+    }
+    
+    return defaultValue;
+  }
+};
+
+const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageProps) => {
   // Check if wallet is connected - keep this at the top with other hooks
   const { authenticated: isConnected, ready: privyReady } = usePrivy();
   const publicClient = usePublicClient();
@@ -163,7 +247,7 @@ const CacheManagerPage = () => {
   const router = useRouter();
 
   const COLORS = ["#0088FE", "#00C49F"];
-  const config = cacheManagerConfig.arbitrum_one;
+  const config = cacheManagerConfig[networkKey];
 
   // Cache management constants
   const CACHE_KEY_PROGRAM_DATA = "cache_program_data_v2";
@@ -456,6 +540,28 @@ const CacheManagerPage = () => {
 
     try {
       setLoadingGasAnalysis(true);
+      
+      console.log(`🚀 Starting fetchProgramAddresses for network: ${networkKey}`);
+      console.log(`📋 Contract address: ${config.contracts.cacheManager.address}`);
+      console.log(`🌐 Network: ${config.chainName}`);
+      if ('rpc' in config) {
+        console.log(`🔗 RPC URL: ${config.rpc}`);
+      }
+      if ('explorer' in config) {
+        console.log(`🔍 Explorer: ${config.explorer}`);
+      }
+
+      // Validate network configuration
+      if (!config || !config.contracts || !config.contracts.cacheManager) {
+        throw new Error(`Invalid network configuration for ${networkKey}`);
+      }
+
+      // Verify contract address is valid
+      if (!config.contracts.cacheManager.address || config.contracts.cacheManager.address === '0x0000000000000000000000000000000000000000') {
+        throw new Error(`Invalid contract address for network ${networkKey}: ${config.contracts.cacheManager.address}`);
+      }
+
+      console.log(`✅ Network validation passed for ${networkKey}`);
 
       // Check cache first (unless force refresh)
       if (!forceRefresh) {
@@ -531,6 +637,8 @@ const CacheManagerPage = () => {
           toBlock: latestBlock,
         });
 
+        console.log(`📊 Found ${allLogs.length} events in optimized range`);
+
         // If we got events but suspect there might be more in earlier blocks, do a quick check
         if (allLogs.length > 0 && estimatedDeploymentBlock > BigInt(0)) {
           console.log(
@@ -576,8 +684,8 @@ const CacheManagerPage = () => {
         });
 
         // Method 2: Fall back to chunked scanning
-        console.log("🎯 Method 2: Using chunked scanning as fallback...");
-        allLogs = await fetchEventsInChunks(BigInt(0), latestBlock, 50000); // Larger chunks since we know it's one contract
+        // console.log("🎯 Method 2: Using chunked scanning as fallback...");
+        // allLogs = await fetchEventsInChunks(BigInt(0), latestBlock, 50000); // Larger chunks since we know it's one contract
       }
 
       // Combine and deduplicate all logs
@@ -601,6 +709,15 @@ const CacheManagerPage = () => {
 
       if (uniqueLogs.length === 0) {
         console.log("❌ No InsertBid events found in entire blockchain");
+        console.log(`🔍 Debug info:`);
+        console.log(`   - Network: ${networkKey}`);
+        console.log(`   - Contract: ${config.contracts.cacheManager.address}`);
+        console.log(`   - Latest block: ${latestBlock}`);
+        console.log(`   - Estimated deployment block: 66207509`);
+        if ('rpc' in config) {
+          console.log(`   - RPC: ${config.rpc}`);
+        }
+        
         toast.error(
           "No InsertBid events found. Make sure bids have been placed on this contract."
         );
@@ -655,6 +772,12 @@ const CacheManagerPage = () => {
       }
     } catch (error: any) {
       console.error("❌ Error fetching program addresses:", error);
+      console.error(`🔍 Error details:`, {
+        network: networkKey,
+        contract: config.contracts.cacheManager.address,
+        error: error.message,
+        stack: error.stack
+      });
       toast.error(`Failed to fetch program addresses: ${error.message}`);
     } finally {
       setLoadingGasAnalysis(false);
@@ -787,7 +910,18 @@ const CacheManagerPage = () => {
     if (isConnected && isAuthInitialized) {
       const initialize = async () => {
         try {
+          console.log(`🚀 Initializing CacheManager for network: ${networkKey}`);
           toast.loading("Loading cache data...", { id: "initialization" });
+          
+          // Validate network before making calls
+          const config = cacheManagerConfig[networkKey];
+          if (!config) {
+            throw new Error(`Invalid network key: ${networkKey}`);
+          }
+          
+          console.log(`📋 Using contract address: ${config.contracts.cacheManager.address}`);
+          
+          // Sequential calls to avoid race conditions
           await fetchEntries(false);
           await fetchCacheSize(false);
           await fetchDecay(false);
@@ -801,8 +935,14 @@ const CacheManagerPage = () => {
             id: "initialization",
           });
         } catch (error: any) {
-          // Parse initialization error
+          console.error("❌ Initialization failed:", error);
           let errorMessage = "Failed to initialize cache data";
+          
+          if (error.message.includes('could not decode result data')) {
+            errorMessage = "Network connection issue. Please check your wallet connection.";
+          } else if (error.message.includes('Invalid network key')) {
+            errorMessage = "Unsupported network. Please switch to Arbitrum Sepolia or Arbitrum One.";
+          }
 
           toast.error(errorMessage);
         }
@@ -810,7 +950,7 @@ const CacheManagerPage = () => {
 
       initialize();
     }
-  }, [isConnected, isAuthInitialized]); // Add both dependencies
+  }, [isConnected, isAuthInitialized, networkKey]); // Add networkKey dependency
 
   // Set up periodic incremental updates for live data
   useEffect(() => {
@@ -831,9 +971,17 @@ const CacheManagerPage = () => {
   const fetchCacheSize = async (showToast = true) => {
     try {
       setIsLoading(true);
-      const contract = await getContract();
-      const size = await contract.cacheSize();
-      setCacheSize(size.toString());
+      console.log(`🔄 Fetching cache size for network: ${networkKey}`);
+      
+      const contract = await getContract(networkKey);
+      const size = await safeContractCall(contract, 'cacheSize', [], '0');
+      
+      if (size !== '0') {
+        setCacheSize(size.toString());
+        console.log(`✅ Cache size set to: ${size}`);
+      } else {
+        console.log(`⚠️ Cache size returned 0, keeping previous value`);
+      }
     } catch (error: any) {
       console.error("Error fetching cache size:", error);
       const errorMessage = showToast
@@ -864,9 +1012,17 @@ const CacheManagerPage = () => {
   const fetchDecay = async (showToast = true) => {
     try {
       setIsLoading(true);
-      const contract = await getContract();
-      const decay = await contract.decay();
-      setDecay(decay.toString());
+      console.log(`🔄 Fetching decay for network: ${networkKey}`);
+      
+      const contract = await getContract(networkKey);
+      const decay = await safeContractCall(contract, 'decay', [], '0');
+      
+      if (decay !== '0') {
+        setDecay(decay.toString());
+        console.log(`✅ Decay set to: ${decay}`);
+      } else {
+        console.log(`⚠️ Decay returned 0, keeping previous value`);
+      }
     } catch (error: any) {
       console.error("Error fetching decay:", error);
       const errorMessage = showToast
@@ -884,9 +1040,17 @@ const CacheManagerPage = () => {
   const fetchQueueSize = async (showToast = true) => {
     try {
       setIsLoading(true);
-      const contract = await getContract();
-      const size = await contract.queueSize();
-      setQueueSize(size.toString());
+      console.log(`🔄 Fetching queue size for network: ${networkKey}`);
+      
+      const contract = await getContract(networkKey);
+      const size = await safeContractCall(contract, 'queueSize', [], '0');
+      
+      if (size !== '0') {
+        setQueueSize(size.toString());
+        console.log(`✅ Queue size set to: ${size}`);
+      } else {
+        console.log(`⚠️ Queue size returned 0, keeping previous value`);
+      }
     } catch (error: any) {
       console.error("Error fetching queue size:", error);
       const errorMessage = showToast
@@ -904,9 +1068,13 @@ const CacheManagerPage = () => {
   const checkIsPaused = async (showToast = true) => {
     try {
       setIsLoading(true);
-      const contract = await getContract();
-      const paused = await contract.isPaused();
-      setIsPaused(paused);
+      console.log(`🔄 Checking pause status for network: ${networkKey}`);
+      
+      const contract = await getContract(networkKey);
+      const paused = await safeContractCall(contract, 'isPaused', [], false);
+      
+      setIsPaused(Boolean(paused));
+      console.log(`✅ Pause status set to: ${paused}`);
     } catch (error: any) {
       console.error("Error checking pause status:", error);
       const errorMessage = showToast
@@ -966,12 +1134,24 @@ const CacheManagerPage = () => {
 
   const fetchEntries = async (showToast = true) => {
     try {
-      console.log("inside fetch entries");
+      console.log(`🔄 Fetching entries for network: ${networkKey}`);
       setIsLoading(true);
-      const contract = await getContract();
-
-      // Fetch raw entries from the contract
-      const rawEntries: any = await contract.getEntries();
+      
+      const contract = await getContract(networkKey);
+      
+      // Fetch raw entries from the contract with retry
+      const rawEntries: any = await retryWithBackoff(async () => {
+        const entries = await contract.getEntries();
+        
+        // Validate entries
+        if (!entries || (Array.isArray(entries) && entries.length === 0)) {
+          console.log(`⚠️ getEntries returned empty result`);
+          return [];
+        }
+        
+        return entries;
+      });
+      
       console.log("Raw entries object:", rawEntries);
 
       const formattedEntries = formatProxyResult(rawEntries);
@@ -980,6 +1160,8 @@ const CacheManagerPage = () => {
       const numberOfEntries = formattedEntries.length;
       setEntriesCount(numberOfEntries);
       setEntries(formattedEntries);
+      
+      console.log(`✅ Entries fetched successfully: ${numberOfEntries} entries`);
     } catch (error: any) {
       console.error("Error fetching entries:", error);
       const errorMessage = showToast
@@ -1038,7 +1220,7 @@ const CacheManagerPage = () => {
       }
 
       // Get minimum bid from contract
-      const contract = await getContract();
+      const contract = await getContract(networkKey);
       let minBidRequired = "0.0";
       try {
         const minBid = await contract.getMinBid(contractAddress);
@@ -1149,7 +1331,7 @@ const CacheManagerPage = () => {
       setFetchingSmallestEntries(true);
       toast.loading("Fetching smallest entries...", { id: "smallest-entries" });
 
-      const contract = await getContract();
+      const contract = await getContract(networkKey);
       const smallestEntries = await contract.getSmallestEntries(k);
       setSmallestEntries(smallestEntries);
 
