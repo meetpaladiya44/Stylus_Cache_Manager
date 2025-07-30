@@ -3,17 +3,17 @@ import React from "react";
 import Image from "next/image";
 import Link from "next/link";
 import Hero from "../assets/SmartCache_logo.svg";
-import { ConnectWallet } from "./ConnectWallet/ConnectWallet";
 import { useEffect, useState } from 'react'
-import { X, Menu, Activity, Database, Brain } from 'lucide-react'
+import { X, Menu, Activity, Database, Brain, User } from 'lucide-react'
+import ConnectWallet from "./ConnectWallet";
 
 const Navbar = () => {
-  const [mounted, setMounted] = useState(false)
+  // const [mounted, setMounted] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  // useEffect(() => {
+  //   setMounted(true)
+  // }, [])
 
   // Close mobile menu when clicking outside
   useEffect(() => {
@@ -37,7 +37,7 @@ const Navbar = () => {
     };
   }, [mobileMenuOpen]);
 
-  if (!mounted) return null
+  // if (!mounted) return null
 
   const toggleMobileMenu = () => {
     setMobileMenuOpen(!mobileMenuOpen)
@@ -92,20 +92,29 @@ const Navbar = () => {
                 href="/dashboard"
                 className="relative group flex items-center gap-2.5 px-5 py-2.5 text-sm font-medium text-zinc-300 hover:text-zinc-100 transition-all duration-300 rounded-xl hover:bg-zinc-800/60"
               >
-                <Database className="w-4 h-4 group-hover:text-green-400 transition-colors duration-300" />
-                <span className="relative z-10">My Dashboard</span>
+                <Database className="w-4 h-4 group-hover:text-yellow-400 transition-colors duration-300" />
+                <span className="relative z-10">Dashboard</span>
+                <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/10 to-amber-500/10 rounded-xl scale-0 group-hover:scale-100 transition-transform duration-300"></div>
+              </Link>
+              <Link
+                href="/profile"
+                className="relative group flex items-center gap-2.5 px-5 py-2.5 text-sm font-medium text-zinc-300 hover:text-zinc-100 transition-all duration-300 rounded-xl hover:bg-zinc-800/60"
+              >
+                <User className="w-4 h-4 group-hover:text-green-400 transition-colors duration-300" />
+                <span className="relative z-10">My Profile</span>
                 <div className="absolute inset-0 bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-xl scale-0 group-hover:scale-100 transition-transform duration-300"></div>
               </Link>
 
               {/* Connect Wallet Button - Desktop */}
               <div className="hidden md:flex items-center">
-                
-                  <div className="relative group">
-                    <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl blur opacity-20 group-hover:opacity-40 transition duration-300"></div>
-                    <div className="relative bg-zinc-800/90 border border-zinc-700/60 rounded-xl p-0.5 hover:border-zinc-600/60 transition-all duration-300 shadow-lg">
-                      <ConnectWallet />
-                    </div>
+                {/* {mounted && ( */}
+                <div className="relative group">
+                  <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full blur opacity-20 group-hover:opacity-40 transition duration-300"></div>
+                  <div className="relative bg-zinc-800/90 border border-zinc-700/60 rounded-full p-0.5 hover:border-zinc-600/60 transition-all duration-300 shadow-lg">
+                    <ConnectWallet />
                   </div>
+                </div>
+                {/* )} */}
               </div>
             </div>
           </div>
@@ -152,19 +161,29 @@ const Navbar = () => {
                   onClick={closeMobileMenu}
                   className="flex items-center gap-3 px-4 py-3.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-xl transition-all duration-200 text-base font-medium border border-transparent hover:border-zinc-700/60"
                 >
-                  <Database className="w-5 h-5 text-green-400" />
-                  My Dashboard
+                  <Database className="w-5 h-5 text-yellow-400" />
+                  Dashboard
+                </Link>
+                <Link
+                  href="/profile"
+                  onClick={closeMobileMenu}
+                  className="flex items-center gap-3 px-4 py-3.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-xl transition-all duration-200 text-base font-medium border border-transparent hover:border-zinc-700/60"
+                >
+                  <User className="w-5 h-5 text-green-400" />
+                  My Profile
                 </Link>
               </div>
 
               {/* Connect Wallet Button - Mobile */}
               <div className="p-6 border-t border-zinc-800/60">
-                  <div className="relative group w-fit">
-                    <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl blur opacity-20"></div>
-                    <div className="relative bg-zinc-800/90 border border-zinc-700/60 rounded-xl p-0.5 shadow-lg">
-                      <ConnectWallet />
-                    </div>
+                {/* {mounted && ( */}
+                <div className="relative group w-fit">
+                  <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full blur opacity-20"></div>
+                  <div className="relative bg-zinc-800/90 border border-zinc-700/60 rounded-full p-0.5 shadow-lg">
+                    <ConnectWallet />
                   </div>
+                </div>
+                {/* )} */}
               </div>
             </div>
           </div>

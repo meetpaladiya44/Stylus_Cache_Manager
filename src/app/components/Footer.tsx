@@ -14,7 +14,7 @@ function Footer() {
             <span className="text-zinc-400 text-sm font-medium">
               © 2025 Smart Cache
             </span>
-            <span className="text-zinc-600 text-sm">|</span>
+            <span className="text-zinc-400 text-sm">|</span>
             <span className="text-zinc-500 text-sm">
               All rights reserved
             </span>
@@ -27,7 +27,7 @@ function Footer() {
               <span>System Status: Operational</span>
             </div>
 
-            <div className="text-zinc-600 text-xs">
+            <div className="text-zinc-400 text-xs">
               Built with ❤️ for Web3
             </div>
           </div>
@@ -36,7 +36,7 @@ function Footer() {
         {/* Powered by section */}
         <div className="mt-4 pt-4 border-t border-zinc-700/30">
           <div className="text-center">
-            <span className="text-zinc-600 text-xs">
+            <span className="text-zinc-400 text-xs">
               Powered by Arbitrum • Built for the future of caching
             </span>
           </div>

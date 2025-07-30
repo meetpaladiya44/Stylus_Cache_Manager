@@ -119,7 +119,7 @@ const CacheEntriesTable: React.FC<CacheEntriesTableProps> = ({
           onClick={() => setCurrentPage(page as number)}
           className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${currentPage === page
             ? 'bg-blue-600 text-white shadow-md'
-            : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
+            : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900'
             }`}
         >
           {page}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Brain, Settings, Loader, CirclePlus } from "lucide-react";
-import { BrowserProvider, parseEther, Contract } from "ethers";
+import { BrowserProvider, parseEther, Contract, Eip1193Provider } from "ethers";
 import { toast, Toaster } from "react-hot-toast";
 
 import { DashboardData } from "../../../types";
@@ -71,9 +71,20 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
     let shouldUpdateData = false;
 
     try {
-      // Get wallet address
-      // await window.ethereum.request({ method: "eth_requestAccounts" });
-      const provider = new BrowserProvider(window.ethereum);
+      // Check if MetaMask is available
+      if (!window.ethereum) {
+        toast.error("MetaMask is not installed. Please install MetaMask to continue.");
+        return;
+      }
+
+      // Type assertion for ethereum provider
+      const ethereum = window.ethereum as unknown as Eip1193Provider;
+
+      // Request account access
+      await ethereum.request({ method: "eth_requestAccounts" });
+
+      // Create provider with proper type checking
+      const provider = new BrowserProvider(ethereum);
       const signer = await provider.getSigner();
       const walletAddress = await signer.getAddress();
 
@@ -103,7 +114,7 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
 
       if (shouldUpdateData) {
         // Call API with wallet address
-        const response = await fetch("/api/dashboard", {
+        const response = await fetch("/api/profile", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -126,6 +137,10 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
     } catch (error: any) {
       if (error.code === 4001 || error.message.includes("user rejected")) {
         toast.error("Transaction cancelled by user");
+      } else if (error.message.includes("MetaMask")) {
+        toast.error("MetaMask error: " + error.message);
+      } else {
+        toast.error("An error occurred: " + (error.message || "Unknown error"));
       }
     } finally {
       setIsLoading(false);

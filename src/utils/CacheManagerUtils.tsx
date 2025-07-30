@@ -1,11 +1,5 @@
-import { ethers, BrowserProvider } from "ethers";
+import { ethers, BrowserProvider, Eip1193Provider } from "ethers";
 import { cacheManagerConfig } from "@/config/CacheManagerConfig";
-
-declare global {
-  interface Window {
-    ethereum?: any;
-  }
-}
 
 export const checkNetwork = async (provider: ethers.BrowserProvider) => {
   const network = await provider.getNetwork();
@@ -17,8 +11,8 @@ export const checkNetwork = async (provider: ethers.BrowserProvider) => {
 
 // Initialize ethers.js Provider
 export const getProvider = async () => {
-  if (typeof window !== "undefined" && window?.ethereum) {
-    const provider = new BrowserProvider(window?.ethereum);
+  if (typeof window !== "undefined" && (window as any)?.ethereum) {
+    const provider = new BrowserProvider((window as any).ethereum as Eip1193Provider);
     return provider;
   } else {
     throw new Error("MetaMask is not installed");

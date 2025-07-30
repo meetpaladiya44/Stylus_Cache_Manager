@@ -223,7 +223,7 @@ const CacheSavingsAnalysis: React.FC<CacheSavingsAnalysisProps> = ({
           </div>
         </div>
       </div>
-      <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+      <div className="mt-4 p-3 bg-gray-50 rounded-xl">
         <div className="flex items-center justify-between text-sm text-gray-600">
           <span>
             Programs analyzed: <strong>{programAddresses.length}</strong>

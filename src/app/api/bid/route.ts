@@ -22,10 +22,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get current date in IST (UTC+5:30)
+    // Get current date in IST
     const now = new Date();
-    const istOffset = 5.5 * 60 * 60 * 1000; // 5:30 hours in milliseconds
-    const istTime = new Date(now.getTime() + istOffset);
+    const istTime = new Date(now.getTime());
 
     const bidData = {
       contractAddress,
@@ -41,7 +40,7 @@ export async function POST(req: NextRequest) {
 
     // Connect to MongoDB
     const client = await clientPromise;
-    const collection = client.db("dashboard").collection("bidHistory");
+    const collection = client.db("smartcache").collection("contracts");
 
     // Insert the bid data
     const result = await collection.insertOne(bidData);

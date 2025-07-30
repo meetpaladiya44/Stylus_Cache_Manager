@@ -13,54 +13,15 @@ import Image from "next/image";
 import { toast, Toaster } from "react-hot-toast";
 import { cacheManagerConfig } from "@/config/CacheManagerConfig";
 import { parseAbiItem } from "viem";
-import { usePublicClient } from "wagmi";
+import { useAccount, usePublicClient } from "wagmi";
 import CacheAnalyticsCards from "./ui/CacheAnalyticsCards";
 import CacheSavingsAnalysis from "./ui/CacheSavingsAnalysis";
 import CacheEntriesTable from "./ui/CacheEntriesTable";
 import CacheSizeDistributionChart from "./ui/CacheSizeDistributionChart";
 import ContractEntriesChart from "./ui/ContractEntriesChart";
-import { ConnectWallet } from "./ConnectWallet/ConnectWallet";
 import MinBidChart from "./ui/MinBidChart";
 import PlaceBidForm from "./ui/PlaceBidForm";
 import FetchSmallestEntries from "./ui/FetchSmallestEntries";
-
-// Add function to check if wallet is connected
-const useIsConnected = () => {
-  const [isConnected, setIsConnected] = useState(false);
-
-  useEffect(() => {
-    const checkConnection = async () => {
-      if (typeof window !== "undefined" && window.ethereum) {
-        try {
-          const accounts = await window.ethereum.request({
-            method: "eth_accounts",
-          });
-          setIsConnected(accounts.length > 0);
-
-          // Listen for account changes
-          window.ethereum.on("accountsChanged", (accounts: string[]) => {
-            setIsConnected(accounts.length > 0);
-          });
-        } catch (error) {
-          console.error("Failed to check wallet connection:", error);
-          setIsConnected(false);
-        }
-      } else {
-        setIsConnected(false);
-      }
-    };
-
-    checkConnection();
-
-    return () => {
-      if (window.ethereum) {
-        window.ethereum.removeListener("accountsChanged", () => { });
-      }
-    };
-  }, []);
-
-  return isConnected;
-};
 
 const fadeInDown = keyframes`
   from {
@@ -93,6 +54,8 @@ interface Props {
 
 import { DashboardData } from "../../../types";
 import CacheManagerHeader from "./ui/CacheManagerHeader";
+import ConnectWallet from "./ConnectWallet";
+import { usePrivy } from "@privy-io/react-auth";
 
 type FullDashboardData = DashboardData & {
   recentPredictions: Array<{
@@ -121,8 +84,20 @@ type FullDashboardData = DashboardData & {
 
 const CacheManagerPage = () => {
   // Check if wallet is connected - keep this at the top with other hooks
-  const isConnected = useIsConnected();
+  const { authenticated: isConnected, ready: privyReady } = usePrivy();
   const publicClient = usePublicClient();
+  const [isAuthInitialized, setIsAuthInitialized] = useState(false);
+
+  // Wait for Privy to be ready before determining connection status
+  useEffect(() => {
+    if (privyReady) {
+      setIsAuthInitialized(true);
+    }
+  }, [privyReady]);
+
+  // console.log("isConnected: ", isConnected);
+  // console.log("privyReady: ", privyReady);
+  // console.log("isAuthInitialized: ", isAuthInitialized);
 
   // All state hooks must be called unconditionally
   const [isLoading, setIsLoading] = useState(false);
@@ -808,8 +783,8 @@ const CacheManagerPage = () => {
   // All useEffect and other hooks must also be called unconditionally
   // Initial data fetch
   useEffect(() => {
-    // Only fetch data if the user is connected
-    if (isConnected) {
+    // Only fetch data if the user is connected and Privy is ready
+    if (isConnected && isAuthInitialized) {
       const initialize = async () => {
         try {
           toast.loading("Loading cache data...", { id: "initialization" });
@@ -835,11 +810,11 @@ const CacheManagerPage = () => {
 
       initialize();
     }
-  }, [isConnected]); // Add isConnected as dependency
+  }, [isConnected, isAuthInitialized]); // Add both dependencies
 
   // Set up periodic incremental updates for live data
   useEffect(() => {
-    if (!isConnected || !lastFetchedBlock) return;
+    if (!isConnected || !isAuthInitialized || !lastFetchedBlock) return;
 
     const interval = setInterval(async () => {
       if (!isIncrementalUpdate && !loadingGasAnalysis) {
@@ -851,7 +826,7 @@ const CacheManagerPage = () => {
     }, INCREMENTAL_UPDATE_INTERVAL);
 
     return () => clearInterval(interval);
-  }, [isConnected, lastFetchedBlock, loadingGasAnalysis, isIncrementalUpdate]);
+  }, [isConnected, isAuthInitialized, lastFetchedBlock, loadingGasAnalysis, isIncrementalUpdate]);
 
   const fetchCacheSize = async (showToast = true) => {
     try {
@@ -1363,7 +1338,15 @@ const CacheManagerPage = () => {
           },
         }}
       />
-      {!isConnected ? (
+      {!isAuthInitialized ? (
+        // Show loading state while Privy initializes
+        <div className="relative w-full h-screen bg-zinc-900 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+            <p className="text-zinc-400 text-lg">Initializing...</p>
+          </div>
+        </div>
+      ) : !isConnected ? (
         // Render the blurred image with connect button when not connected
         <div className="relative w-full h-screen bg-zinc-900">
           <div className="absolute inset-0 bg-gradient-to-br from-zinc-900/90 via-zinc-800/80 to-zinc-900/90"></div>
@@ -1383,8 +1366,8 @@ const CacheManagerPage = () => {
                 Secure access to your cache management dashboard
               </p>
               <div className="z-10 relative group w-fit mx-auto">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl blur opacity-20 group-hover:opacity-40 transition duration-300"></div>
-                <div className="relative bg-zinc-800/80 border border-zinc-700/50 rounded-xl p-0.5">
+                <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full blur opacity-20 group-hover:opacity-40 transition duration-300"></div>
+                <div className="relative bg-zinc-800/80 border border-zinc-700/50 rounded-full p-0.5">
                   <ConnectWallet />
                 </div>
               </div>
@@ -1395,7 +1378,7 @@ const CacheManagerPage = () => {
         // Render the full component when connected
         <div className="min-h-screen bg-zinc-900">
           {/* Header Section */}
-          <CacheManagerHeader isConnected={isConnected} setIsModalOpen={setIsModalOpen} ConnectKitButton={ConnectWallet} />
+          <CacheManagerHeader isConnected={isConnected} setIsModalOpen={setIsModalOpen} />
 
           {/* Main Content */}
           <div className="px-6 lg:px-8 py-8 space-y-8">
