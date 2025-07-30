@@ -469,7 +469,9 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
     if (!publicClient || !isConnected || !lastFetchedBlock) return [];
 
     try {
-      const latestBlock = await publicClient.getBlockNumber();
+      const latestBlock = await retryWithBackoff(async () => {
+        return await publicClient.getBlockNumber();
+      });
 
       // Only fetch if there are new blocks
       if (latestBlock <= lastFetchedBlock) {
@@ -482,13 +484,18 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
         } to ${latestBlock}`
       );
 
-      const newLogs = await publicClient.getLogs({
-        address: config.contracts.cacheManager.address as `0x${string}`,
-        event: parseAbiItem(
-          "event InsertBid(bytes32 indexed codehash, address program, uint192 bid, uint64 size)"
-        ),
-        fromBlock: lastFetchedBlock + BigInt(1),
-        toBlock: latestBlock,
+      // Add delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const newLogs = await retryWithBackoff(async () => {
+        return await publicClient.getLogs({
+          address: config.contracts.cacheManager.address as `0x${string}`,
+          event: parseAbiItem(
+            "event InsertBid(bytes32 indexed codehash, address program, uint192 bid, uint64 size)"
+          ),
+          fromBlock: lastFetchedBlock + BigInt(1),
+          toBlock: latestBlock,
+        });
       });
 
       setLastFetchedBlock(latestBlock);
@@ -499,12 +506,12 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
         );
 
         // Extract new program addresses
-        const newPrograms = [
-          ...new Set(newLogs.map((log) => log.args?.program as string)),
-        ];
+        const newPrograms: string[] = Array.from(
+          new Set(newLogs.map((log: any) => log.args?.program as string))
+        );
         const existingPrograms = new Set(programAddresses);
-        const trulyNewPrograms = newPrograms.filter(
-          (addr) => !existingPrograms.has(addr)
+        const trulyNewPrograms: string[] = newPrograms.filter(
+          (addr: string) => !existingPrograms.has(addr)
         );
 
         if (trulyNewPrograms.length > 0) {
@@ -512,7 +519,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
             `🆕 Found ${trulyNewPrograms.length} new program addresses:`,
             trulyNewPrograms
           );
-          const updatedAddresses = [...programAddresses, ...trulyNewPrograms];
+          const updatedAddresses: string[] = [...programAddresses, ...trulyNewPrograms];
           setProgramAddresses(updatedAddresses);
           setCachedProgramData(updatedAddresses, latestBlock);
 
@@ -530,6 +537,13 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       return newLogs;
     } catch (error: any) {
       console.error("❌ Error in incremental update:", error);
+      
+      // Handle rate limiting specifically
+      if (error.message.includes('429') || error.message.includes('Too Many Requests')) {
+        console.warn("⚠️ Rate limit hit during incremental update, will retry later");
+        return [];
+      }
+      
       return [];
     }
   };
@@ -602,8 +616,10 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
         `📍 Cache Manager Contract Address: ${config.contracts.cacheManager.address}`
       );
 
-      // Get the latest block number
-      const latestBlock = await publicClient.getBlockNumber();
+      // Get the latest block number with retry
+      const latestBlock = await retryWithBackoff(async () => {
+        return await publicClient.getBlockNumber();
+      });
       console.log(`📊 Latest block number: ${latestBlock}`);
 
       let allLogs: any[] = [];
@@ -627,14 +643,19 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
           `🎯 Trying optimized range: ${estimatedDeploymentBlock} to ${latestBlock}`
         );
 
+        // Add delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 500));
+
         // Try to get all events from estimated deployment to now
-        allLogs = await publicClient.getLogs({
-          address: config.contracts.cacheManager.address as `0x${string}`,
-          event: parseAbiItem(
-            "event InsertBid(bytes32 indexed codehash, address program, uint192 bid, uint64 size)"
-          ),
-          fromBlock: estimatedDeploymentBlock,
-          toBlock: latestBlock,
+        allLogs = await retryWithBackoff(async () => {
+          return await publicClient.getLogs({
+            address: config.contracts.cacheManager.address as `0x${string}`,
+            event: parseAbiItem(
+              "event InsertBid(bytes32 indexed codehash, address program, uint192 bid, uint64 size)"
+            ),
+            fromBlock: estimatedDeploymentBlock,
+            toBlock: latestBlock,
+          });
         });
 
         console.log(`📊 Found ${allLogs.length} events in optimized range`);
@@ -646,13 +667,18 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
           );
 
           try {
-            const olderLogs = await publicClient.getLogs({
-              address: config.contracts.cacheManager.address as `0x${string}`,
-              event: parseAbiItem(
-                "event InsertBid(bytes32 indexed codehash, address program, uint192 bid, uint64 size)"
-              ),
-              fromBlock: BigInt(0),
-              toBlock: estimatedDeploymentBlock - BigInt(1),
+            // Add delay before next request
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            const olderLogs = await retryWithBackoff(async () => {
+              return await publicClient.getLogs({
+                address: config.contracts.cacheManager.address as `0x${string}`,
+                event: parseAbiItem(
+                  "event InsertBid(bytes32 indexed codehash, address program, uint192 bid, uint64 size)"
+                ),
+                fromBlock: BigInt(0),
+                toBlock: estimatedDeploymentBlock - BigInt(1),
+              });
             });
 
             if (olderLogs.length > 0) {
@@ -731,9 +757,9 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       }
 
       // Extract unique program addresses and log them
-      const uniquePrograms = [
-        ...new Set(uniqueLogs.map((log) => log.args?.program as string)),
-      ];
+      const uniquePrograms: string[] = Array.from(
+        new Set(uniqueLogs.map((log: any) => log.args?.program as string))
+      );
       console.log(
         `📋 Found ${uniquePrograms.length} unique program addresses:`
       );
@@ -778,7 +804,15 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
         error: error.message,
         stack: error.stack
       });
-      toast.error(`Failed to fetch program addresses: ${error.message}`);
+      
+      // Handle specific error types
+      if (error.message.includes('429') || error.message.includes('Too Many Requests')) {
+        toast.error("Rate limit exceeded. Please try again in a few minutes.");
+      } else if (error.message.includes('CORS')) {
+        toast.error("Network access issue. Please check your connection.");
+      } else {
+        toast.error(`Failed to fetch program addresses: ${error.message}`);
+      }
     } finally {
       setLoadingGasAnalysis(false);
     }

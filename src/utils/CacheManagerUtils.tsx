@@ -15,19 +15,65 @@ export const checkNetwork = async (provider: ethers.BrowserProvider) => {
   }
 };
 
-// Initialize ethers.js Provider
-export const getProvider = async () => {
-  if (typeof window !== "undefined" && (window as any)?.ethereum) {
-    const provider = new BrowserProvider((window as any).ethereum as Eip1193Provider);
-    return provider;
-  } else {
-    throw new Error("MetaMask is not installed");
+// Retry function with exponential backoff
+const retryWithBackoff = async (
+  fn: () => Promise<any>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<any> => {
+  let lastError: any;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      console.log(`Provider attempt ${attempt + 1} failed:`, error.message);
+      
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      // Exponential backoff
+      const delay = baseDelay * Math.pow(2, attempt);
+      console.log(`Retrying provider in ${delay}ms...`);
+      await new Promise((resolve: any) => setTimeout(resolve, delay));
+    }
   }
+  
+  throw lastError;
+};
+
+// Initialize ethers.js Provider with fallback
+export const getProvider = async (networkKey?: "arbitrum_sepolia" | "arbitrum_one") => {
+  if (typeof window !== "undefined" && (window as any)?.ethereum) {
+    try {
+      // First try with wallet provider
+      const provider = new BrowserProvider((window as any).ethereum as Eip1193Provider);
+      return provider;
+    } catch (error) {
+      console.warn("Wallet provider failed, trying RPC fallback:", error);
+    }
+  }
+  
+  // Fallback to RPC provider if wallet not available or failed
+  if (networkKey) {
+    const config = cacheManagerConfig[networkKey];
+    if (config?.rpc) {
+      console.log(`Using RPC provider for ${networkKey}: ${config.rpc}`);
+      return new ethers.JsonRpcProvider(config.rpc);
+    }
+  }
+  
+  throw new Error("No provider available");
 };
 
 // Initialize Contract for a given network key
 export const getContract = async (networkKey: "arbitrum_sepolia" | "arbitrum_one") => {
-  const provider = await getProvider();
+  const provider = await retryWithBackoff(async () => {
+    return await getProvider(networkKey);
+  });
+  
   const signer = await provider.getSigner();
   const config = cacheManagerConfig[networkKey];
   const contract = new ethers.Contract(

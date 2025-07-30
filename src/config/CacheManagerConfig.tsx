@@ -5,6 +5,10 @@ export const cacheManagerConfig = {
   arbitrum_sepolia: {
     chainId: 421614,
     chainName: "Arbitrum Sepolia Testnet",
+    rpc: process.env.NEXT_PUBLIC_ALCHEMY_API_KEY 
+      ? `https://arb-sepolia.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY}`
+      : "https://sepolia-rollup.arbitrum.io/rpc",
+    explorer: "https://sepolia.arbiscan.io",
     contracts: {
       cacheManager: {
         name: "CacheManager",
@@ -16,7 +20,9 @@ export const cacheManagerConfig = {
   arbitrum_one: {
     chainId: 42161,
     chainName: "Arbitrum One Mainnet",
-    rpc: "arbitrum-mainnet.infura.io",
+    rpc: process.env.NEXT_PUBLIC_ALCHEMY_API_KEY
+      ? `https://arb-mainnet.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY}`
+      : "https://arb1.arbitrum.io/rpc",
     explorer: "https://explorer.arbitrum.io",
     contracts: {
       cacheManager: {
