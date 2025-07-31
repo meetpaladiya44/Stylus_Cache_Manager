@@ -45,7 +45,7 @@ const retryWithBackoff = async (
 };
 
 // Initialize ethers.js Provider with fallback
-export const getProvider = async (networkKey?: "arbitrum_sepolia" | "arbitrum_one") => {
+export const getProvider = async (networkKey?: "arbitrum_sepolia" | "arbitrum_one", rpcType: "infura" | "alchemy" | "default" = "infura") => {
   if (typeof window !== "undefined" && (window as any)?.ethereum) {
     try {
       // First try with wallet provider
@@ -59,9 +59,12 @@ export const getProvider = async (networkKey?: "arbitrum_sepolia" | "arbitrum_on
   // Fallback to RPC provider if wallet not available or failed
   if (networkKey) {
     const config = cacheManagerConfig[networkKey];
-    if (config?.rpc) {
-      console.log(`Using RPC provider for ${networkKey}: ${config.rpc}`);
-      return new ethers.JsonRpcProvider(config.rpc);
+    if (config?.rpc && typeof config.rpc === 'object') {
+      const rpcUrl = config.rpc[rpcType];
+      if (rpcUrl) {
+        console.log(`Using ${rpcType} RPC provider for ${networkKey}: ${rpcUrl}`);
+        return new ethers.JsonRpcProvider(rpcUrl);
+      }
     }
   }
   
@@ -69,9 +72,9 @@ export const getProvider = async (networkKey?: "arbitrum_sepolia" | "arbitrum_on
 };
 
 // Initialize Contract for a given network key
-export const getContract = async (networkKey: "arbitrum_sepolia" | "arbitrum_one") => {
+export const getContract = async (networkKey: "arbitrum_sepolia" | "arbitrum_one", rpcType: "infura" | "alchemy" | "default" = "infura") => {
   const provider = await retryWithBackoff(async () => {
-    return await getProvider(networkKey);
+    return await getProvider(networkKey, rpcType);
   });
   
   const signer = await provider.getSigner();

@@ -127,7 +127,7 @@ const safeContractCall = async (
     console.log(`🔍 Calling ${methodName} with args:`, args);
     
     const result = await retryWithBackoff(async () => {
-      const method = contract[methodName];
+      const method = contract[methodName]; // this is as same as contract.methodName as in object we can do this way also to call the read function of the contract
       if (!method) {
         throw new Error(`Method ${methodName} not found on contract`);
       }
@@ -550,16 +550,20 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
 
   // Function to fetch all InsertBid events and extract program addresses
   const fetchProgramAddresses = async (forceRefresh = false) => {
+    return fetchProgramAddressesWithProvider(forceRefresh, "infura");
+  };
+
+  const fetchProgramAddressesWithProvider = async (forceRefresh = false, rpcType: "infura" | "alchemy" | "default" = "infura") => {
     if (!publicClient || !isConnected) return;
 
     try {
       setLoadingGasAnalysis(true);
       
-      console.log(`🚀 Starting fetchProgramAddresses for network: ${networkKey}`);
+      console.log(`🚀 Starting fetchProgramAddresses for network: ${networkKey} using ${rpcType.toUpperCase()} RPC`);
       console.log(`📋 Contract address: ${config.contracts.cacheManager.address}`);
       console.log(`🌐 Network: ${config.chainName}`);
-      if ('rpc' in config) {
-        console.log(`🔗 RPC URL: ${config.rpc}`);
+      if (config.rpc && typeof config.rpc === 'object' && config.rpc[rpcType]) {
+        console.log(`🔗 RPC URL: ${config.rpc[rpcType]}`);
       }
       if ('explorer' in config) {
         console.log(`🔍 Explorer: ${config.explorer}`);
@@ -740,20 +744,32 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
         console.log(`   - Contract: ${config.contracts.cacheManager.address}`);
         console.log(`   - Latest block: ${latestBlock}`);
         console.log(`   - Estimated deployment block: 66207509`);
+        console.log(`   - Current RPC: ${rpcType.toUpperCase()}`);
         if ('rpc' in config) {
           console.log(`   - RPC: ${config.rpc}`);
         }
         
-        toast.error(
-          "No InsertBid events found. Make sure bids have been placed on this contract."
-        );
-        setProgramAddresses([]);
-        setGasAnalysisData({
-          totalGasWithoutCache: 0,
-          totalGasWithCache: 0,
-          totalGasSaved: 0,
-        });
-        return;
+        // Trigger RPC fallback when no events are found
+        if (rpcType === "infura") {
+          console.log("🔄 No events found with Infura, trying Alchemy...");
+          throw new Error("No InsertBid events found with Infura RPC - triggering fallback to Alchemy");
+        } else if (rpcType === "alchemy") {
+          console.log("🔄 No events found with Alchemy, trying Default...");
+          throw new Error("No InsertBid events found with Alchemy RPC - triggering fallback to Default");
+        } else {
+          // If we're already using the default RPC and still no events, show error
+          console.log("❌ No InsertBid events found with any RPC provider");
+          toast.error(
+            "No InsertBid events found. Make sure bids have been placed on this contract."
+          );
+          setProgramAddresses([]);
+          setGasAnalysisData({
+            totalGasWithoutCache: 0,
+            totalGasWithCache: 0,
+            totalGasSaved: 0,
+          });
+          return;
+        }
       }
 
       // Extract unique program addresses and log them
@@ -813,6 +829,9 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       } else {
         toast.error(`Failed to fetch program addresses: ${error.message}`);
       }
+      
+      // Re-throw the error to trigger fallback mechanism
+      throw error;
     } finally {
       setLoadingGasAnalysis(false);
     }
@@ -955,15 +974,8 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
           
           console.log(`📋 Using contract address: ${config.contracts.cacheManager.address}`);
           
-          // Sequential calls to avoid race conditions
-          await fetchEntries(false);
-          await fetchCacheSize(false);
-          await fetchDecay(false);
-          await fetchQueueSize(false);
-          await checkIsPaused(false);
-
-          // Fetch program addresses and calculate gas analysis
-          await fetchProgramAddresses();
+          // Try different RPC providers with fallback mechanism
+          await tryFetchDataWithFallback();
 
           toast.success("Cache data loaded successfully!", {
             id: "initialization",
@@ -986,6 +998,124 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
     }
   }, [isConnected, isAuthInitialized, networkKey]); // Add networkKey dependency
 
+  // Function to try fetching data with RPC fallback mechanism
+  const tryFetchDataWithFallback = async () => {
+    const rpcProviders = ["infura", "alchemy", "default"] as const;
+    const timeout = 10000; // 10 seconds timeout
+    
+    // Step 1: Try to fetch regular data with fallback (with timeout)
+    let regularDataSuccess = false;
+    let successfulRpcForRegularData: "infura" | "alchemy" | "default" | null = null;
+    
+    for (const rpcType of rpcProviders) {
+      try {
+        console.log(`🔄 Trying ${rpcType.toUpperCase()} RPC for regular data...`);
+        
+        // Check if this RPC provider is available
+        const config = cacheManagerConfig[networkKey];
+        if (!config?.rpc || typeof config.rpc !== 'object' || !config.rpc[rpcType]) {
+          console.log(`⚠️ ${rpcType.toUpperCase()} RPC not available, skipping...`);
+          continue;
+        }
+        
+        // Fetch regular data with timeout
+        console.log(`📡 Fetching regular data with ${timeout}ms timeout...`);
+        const regularDataPromise = fetchRegularDataWithProvider(rpcType);
+        const regularDataTimeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error(`Regular data timeout after ${timeout}ms`)), timeout)
+        );
+        
+        // Race between regular data fetch and timeout
+        await Promise.race([regularDataPromise, regularDataTimeoutPromise]);
+        console.log(`✅ Regular data fetched successfully using ${rpcType.toUpperCase()} RPC`);
+        
+        regularDataSuccess = true;
+        successfulRpcForRegularData = rpcType;
+        break; // Exit the loop since regular data is fetched successfully
+        
+      } catch (error: any) {
+        console.warn(`❌ Failed to fetch regular data using ${rpcType.toUpperCase()} RPC:`, error.message);
+        
+        if (rpcType === "default") {
+          // If even the default RPC fails for regular data, throw the error
+          throw new Error(`All RPC providers failed for regular data. Last error: ${error.message}`);
+        }
+        
+        // Continue to next RPC provider
+        console.log(`🔄 Switching to next RPC provider for regular data...`);
+      }
+    }
+    
+    if (!regularDataSuccess) {
+      throw new Error("Failed to fetch regular data with any RPC provider");
+    }
+    
+    // Step 2: Try to fetch program addresses with fallback (without timeout)
+    let programAddressesSuccess = false;
+    let successfulRpcForProgramAddresses: "infura" | "alchemy" | "default" | null = null;
+    
+    for (const rpcType of rpcProviders) {
+      try {
+        console.log(`🔄 Trying ${rpcType.toUpperCase()} RPC for program addresses...`);
+        
+        // Check if this RPC provider is available
+        const config = cacheManagerConfig[networkKey];
+        if (!config?.rpc || typeof config.rpc !== 'object' || !config.rpc[rpcType]) {
+          console.log(`⚠️ ${rpcType.toUpperCase()} RPC not available, skipping...`);
+          continue;
+        }
+        
+        // Fetch program addresses without timeout
+        console.log(`📡 Fetching program addresses without timeout...`);
+        await fetchProgramAddressesWithProviderOnly(rpcType);
+        console.log(`✅ Program addresses fetched successfully using ${rpcType.toUpperCase()} RPC`);
+        
+        programAddressesSuccess = true;
+        successfulRpcForProgramAddresses = rpcType;
+        break; // Exit the loop since program addresses are fetched successfully
+        
+      } catch (error: any) {
+        console.warn(`❌ Failed to fetch program addresses using ${rpcType.toUpperCase()} RPC:`, error.message);
+        
+        if (rpcType === "default") {
+          // If even the default RPC fails for program addresses, show error but don't throw
+          console.error(`❌ All RPC providers failed for program addresses. Last error: ${error.message}`);
+          toast.error("Failed to fetch program addresses with any RPC provider. Regular data was loaded successfully.");
+          break; // Exit the loop but don't throw error since regular data is already loaded
+        }
+        
+        // Continue to next RPC provider
+        console.log(`🔄 Switching to next RPC provider for program addresses...`);
+      }
+    }
+    
+    if (regularDataSuccess && programAddressesSuccess) {
+      console.log(`✅ All data fetched successfully! Regular data: ${successfulRpcForRegularData?.toUpperCase()}, Program addresses: ${successfulRpcForProgramAddresses?.toUpperCase()}`);
+    } else if (regularDataSuccess && !programAddressesSuccess) {
+      console.log(`⚠️ Regular data loaded successfully, but program addresses failed. Regular data: ${successfulRpcForRegularData?.toUpperCase()}`);
+    }
+  };
+
+  // Function to fetch regular data (with timeout) using a specific RPC provider
+  const fetchRegularDataWithProvider = async (rpcType: "infura" | "alchemy" | "default") => {
+    console.log(`📡 Fetching regular data using ${rpcType.toUpperCase()} RPC provider`);
+    
+    // Sequential calls to avoid race conditions
+    await fetchEntriesWithProvider(false, rpcType);
+    await fetchCacheSizeWithProvider(false, rpcType);
+    await fetchDecayWithProvider(false, rpcType);
+    await fetchQueueSizeWithProvider(false, rpcType);
+    await checkIsPausedWithProvider(false, rpcType);
+  };
+
+  // Function to fetch program addresses (without timeout) using a specific RPC provider
+  const fetchProgramAddressesWithProviderOnly = async (rpcType: "infura" | "alchemy" | "default") => {
+    console.log(`📡 Fetching program addresses using ${rpcType.toUpperCase()} RPC provider (no timeout)`);
+    
+    // Fetch program addresses and calculate gas analysis - no timeout
+    await fetchProgramAddressesWithProvider(false, rpcType);
+  };
+
   // Set up periodic incremental updates for live data
   useEffect(() => {
     if (!isConnected || !isAuthInitialized || !lastFetchedBlock) return;
@@ -1003,11 +1133,15 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
   }, [isConnected, isAuthInitialized, lastFetchedBlock, loadingGasAnalysis, isIncrementalUpdate]);
 
   const fetchCacheSize = async (showToast = true) => {
+    return fetchCacheSizeWithProvider(showToast, "infura");
+  };
+
+  const fetchCacheSizeWithProvider = async (showToast = true, rpcType: "infura" | "alchemy" | "default" = "infura") => {
     try {
       setIsLoading(true);
-      console.log(`🔄 Fetching cache size for network: ${networkKey}`);
+      console.log(`🔄 Fetching cache size for network: ${networkKey} using ${rpcType.toUpperCase()} RPC`);
       
-      const contract = await getContract(networkKey);
+      const contract = await getContract(networkKey, rpcType);
       const size = await safeContractCall(contract, 'cacheSize', [], '0');
       
       if (size !== '0') {
@@ -1024,6 +1158,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       if (showToast) {
         toast.error(errorMessage);
       }
+      throw error; // Re-throw to trigger fallback
     } finally {
       setIsLoading(false);
     }
@@ -1044,11 +1179,15 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
 
   // Fetch Decay
   const fetchDecay = async (showToast = true) => {
+    return fetchDecayWithProvider(showToast, "infura");
+  };
+
+  const fetchDecayWithProvider = async (showToast = true, rpcType: "infura" | "alchemy" | "default" = "infura") => {
     try {
       setIsLoading(true);
-      console.log(`🔄 Fetching decay for network: ${networkKey}`);
+      console.log(`🔄 Fetching decay for network: ${networkKey} using ${rpcType.toUpperCase()} RPC`);
       
-      const contract = await getContract(networkKey);
+      const contract = await getContract(networkKey, rpcType);
       const decay = await safeContractCall(contract, 'decay', [], '0');
       
       if (decay !== '0') {
@@ -1065,6 +1204,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       if (showToast) {
         toast.error(errorMessage);
       }
+      throw error; // Re-throw to trigger fallback
     } finally {
       setIsLoading(false);
     }
@@ -1072,11 +1212,15 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
 
   // Fetch Queue Size
   const fetchQueueSize = async (showToast = true) => {
+    return fetchQueueSizeWithProvider(showToast, "infura");
+  };
+
+  const fetchQueueSizeWithProvider = async (showToast = true, rpcType: "infura" | "alchemy" | "default" = "infura") => {
     try {
       setIsLoading(true);
-      console.log(`🔄 Fetching queue size for network: ${networkKey}`);
+      console.log(`🔄 Fetching queue size for network: ${networkKey} using ${rpcType.toUpperCase()} RPC`);
       
-      const contract = await getContract(networkKey);
+      const contract = await getContract(networkKey, rpcType);
       const size = await safeContractCall(contract, 'queueSize', [], '0');
       
       if (size !== '0') {
@@ -1093,6 +1237,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       if (showToast) {
         toast.error(errorMessage);
       }
+      throw error; // Re-throw to trigger fallback
     } finally {
       setIsLoading(false);
     }
@@ -1100,11 +1245,15 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
 
   // Check if Paused
   const checkIsPaused = async (showToast = true) => {
+    return checkIsPausedWithProvider(showToast, "infura");
+  };
+
+  const checkIsPausedWithProvider = async (showToast = true, rpcType: "infura" | "alchemy" | "default" = "infura") => {
     try {
       setIsLoading(true);
-      console.log(`🔄 Checking pause status for network: ${networkKey}`);
+      console.log(`🔄 Checking pause status for network: ${networkKey} using ${rpcType.toUpperCase()} RPC`);
       
-      const contract = await getContract(networkKey);
+      const contract = await getContract(networkKey, rpcType);
       const paused = await safeContractCall(contract, 'isPaused', [], false);
       
       setIsPaused(Boolean(paused));
@@ -1117,6 +1266,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       if (showToast) {
         toast.error(errorMessage);
       }
+      throw error; // Re-throw to trigger fallback
     } finally {
       setIsLoading(false);
     }
@@ -1167,11 +1317,15 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
   };
 
   const fetchEntries = async (showToast = true) => {
+    return fetchEntriesWithProvider(showToast, "infura");
+  };
+
+  const fetchEntriesWithProvider = async (showToast = true, rpcType: "infura" | "alchemy" | "default" = "infura") => {
     try {
-      console.log(`🔄 Fetching entries for network: ${networkKey}`);
+      console.log(`🔄 Fetching entries for network: ${networkKey} using ${rpcType.toUpperCase()} RPC`);
       setIsLoading(true);
       
-      const contract = await getContract(networkKey);
+      const contract = await getContract(networkKey, rpcType);
       
       // Fetch raw entries from the contract with retry
       const rawEntries: any = await retryWithBackoff(async () => {
@@ -1204,6 +1358,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       if (showToast) {
         toast.error(errorMessage);
       }
+      throw error; // Re-throw to trigger fallback
     } finally {
       setIsLoading(false);
     }
@@ -1235,7 +1390,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
 
       // Get network information
       const network = await provider.getNetwork();
-      const networkName = network.name === "arbitrum-sepolia" ? "arbitrum-sepolia" : network.name;
+      const networkName = network.name === "arbitrum-sepolia" ? "arbitrum-sepolia" : "arbitrum-one";
 
       // ARB_WASM precompile configuration for gas analysis
       const arbWasmAddress = "0x0000000000000000000000000000000000000071";
