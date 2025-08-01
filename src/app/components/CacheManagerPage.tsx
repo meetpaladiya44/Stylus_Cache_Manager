@@ -23,6 +23,12 @@ import ContractEntriesChart from "./ui/ContractEntriesChart";
 import MinBidChart from "./ui/MinBidChart";
 import PlaceBidForm from "./ui/PlaceBidForm";
 import FetchSmallestEntries from "./ui/FetchSmallestEntries";
+import { getCacheSize } from "@/utils/CacheManagerUtils";
+import { getDecay } from "@/utils/CacheManagerUtils";
+import { getQueueSize } from "@/utils/CacheManagerUtils";
+import { getIsPaused } from "@/utils/CacheManagerUtils";
+import { getEntries } from "@/utils/CacheManagerUtils";
+import { getMinBid } from "@/utils/CacheManagerUtils";
 
 const fadeInDown = keyframes`
   from {
@@ -94,25 +100,25 @@ const retryWithBackoff = async (
   baseDelay: number = 1000
 ): Promise<any> => {
   let lastError: any;
-  
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await fn();
     } catch (error: any) {
       lastError = error;
       console.log(`Attempt ${attempt + 1} failed:`, error.message);
-      
+
       if (attempt === maxRetries) {
         throw error;
       }
-      
+
       // Exponential backoff
       const delay = baseDelay * Math.pow(2, attempt);
       console.log(`Retrying in ${delay}ms...`);
       await new Promise((resolve: any) => setTimeout(resolve, delay));
     }
   }
-  
+
   throw lastError;
 };
 
@@ -125,33 +131,33 @@ const safeContractCall = async (
 ): Promise<any> => {
   try {
     console.log(`🔍 Calling ${methodName} with args:`, args);
-    
+
     const result = await retryWithBackoff(async () => {
       const method = contract[methodName]; // this is as same as contract.methodName as in object we can do this way also to call the read function of the contract
       if (!method) {
         throw new Error(`Method ${methodName} not found on contract`);
       }
-      
+
       const response = await method(...args);
-      
+
       // Validate response
       if (response === null || response === undefined) {
         throw new Error(`Method ${methodName} returned null/undefined`);
       }
-      
+
       // Check if response is empty bytes (0x)
       if (typeof response === 'string' && response === '0x') {
         throw new Error(`Method ${methodName} returned empty data (0x)`);
       }
-      
+
       return response;
     });
-    
+
     console.log(`✅ ${methodName} successful:`, result);
     return result;
   } catch (error: any) {
     console.error(`❌ ${methodName} failed:`, error.message);
-    
+
     // Log specific error details for debugging
     if (error.message.includes('could not decode result data')) {
       console.error(`🔍 Decode error details:`, {
@@ -161,7 +167,7 @@ const safeContractCall = async (
         code: error.code
       });
     }
-    
+
     return defaultValue;
   }
 };
@@ -187,17 +193,17 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
   const [isLoading, setIsLoading] = useState(false);
   const [fetchingSmallestEntries, setFetchingSmallestEntries] = useState(false);
   const [cacheSize, setCacheSize] = useState<string | null>(null);
-  const [decay, setDecay] = useState(null);
-  const [entries, setEntries] = useState([]);
+  const [decay, setDecay] = useState<string | null>(null);
+  const [entries, setEntries] = useState<any[]>([]);
   const [minBid, setMinBid] = useState<any>(null);
   const [minBidParam, setMinBidParam] = useState("");
-  const [smallestEntries, setSmallestEntries] = useState([]);
+  const [smallestEntries, setSmallestEntries] = useState<any[]>([]);
   const [smallestEntriesCount, setSmallestEntriesCount] = useState("");
   const [isPaused, setIsPaused] = useState(false);
   const [entriesCount, setEntriesCount] = useState(0);
   const [contractAddress, setContractAddress] = useState("");
   const [bidAmount, setBidAmount] = useState<any>("");
-  const [queueSize, setQueueSize] = useState(null);
+  const [queueSize, setQueueSize] = useState<string | null>(null);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [searchTerm, setSearchTerm] = useState("");
@@ -393,11 +399,18 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
         gasSavings: gas - gasWhenCached,
       };
     } catch (error: any) {
-      console.error(
-        `Failed to get program init gas for ${contractAddress}:`,
-        error
-      );
-      throw error;
+      // Handle specific error cases
+      if (error.message.includes("execution reverted")) {
+        throw new Error(`Contract ${contractAddress} is not a valid Stylus contract or doesn't exist`);
+      } else if (error.message.includes("CALL_EXCEPTION")) {
+        throw new Error(`Failed to call programInitGas for ${contractAddress}: Contract may not be deployed or accessible`);
+      } else {
+        console.error(
+          `Failed to get program init gas for ${contractAddress}:`,
+          error
+        );
+        throw error;
+      }
     }
   };
 
@@ -430,7 +443,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       );
       toast.loading(
         `Scanning chunk ${chunkCount}/${totalChunks} (blocks ${currentBlock.toString()} to ${chunkEnd.toString()})...`,
-        { id: "chunk-scan" }
+        { id: `chunk-scan-${chunkCount}` }
       );
 
       try {
@@ -537,20 +550,164 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       return newLogs;
     } catch (error: any) {
       console.error("❌ Error in incremental update:", error);
-      
+
       // Handle rate limiting specifically
       if (error.message.includes('429') || error.message.includes('Too Many Requests')) {
         console.warn("⚠️ Rate limit hit during incremental update, will retry later");
         return [];
       }
-      
+
       return [];
     }
   };
 
-  // Function to fetch all InsertBid events and extract program addresses
+  // Function to fetch all InsertBid events and extract program addresses using Etherscan API
   const fetchProgramAddresses = async (forceRefresh = false) => {
-    return fetchProgramAddressesWithProvider(forceRefresh, "infura");
+    if (!isConnected) return;
+
+    try {
+      setLoadingGasAnalysis(true);
+
+      console.log(`🚀 Starting fetchProgramAddresses for network: ${networkKey} using Etherscan API`);
+      console.log(`📋 Contract address: ${config.contracts.cacheManager.address}`);
+      console.log(`🌐 Network: ${config.chainName}`);
+
+      // Validate network configuration
+      if (!config || !config.contracts || !config.contracts.cacheManager) {
+        throw new Error(`Invalid network configuration for ${networkKey}`);
+      }
+
+      // Verify contract address is valid
+      if (!config.contracts.cacheManager.address || config.contracts.cacheManager.address === '0x0000000000000000000000000000000000000000') {
+        throw new Error(`Invalid contract address for network ${networkKey}: ${config.contracts.cacheManager.address}`);
+      }
+
+      console.log(`✅ Network validation passed for ${networkKey}`);
+
+      // Check cache first (unless force refresh)
+      if (!forceRefresh) {
+        const cachedData = getCachedProgramData();
+        const cachedGasData = getCachedGasAnalysis();
+
+        if (cachedData && cachedGasData) {
+          console.log(
+            `✅ Using cached data: ${cachedData.programAddresses.length} addresses, last fetched at block ${cachedData.lastFetchedBlock}`
+          );
+
+          setProgramAddresses(cachedData.programAddresses);
+          setGasAnalysisData(cachedGasData);
+          setLastFetchedBlock(cachedData.lastFetchedBlock);
+
+          setLoadingGasAnalysis(false);
+          toast.success(
+            `Loaded cached data: ${cachedData.programAddresses.length} programs`
+          );
+          return;
+        }
+      }
+
+      console.log(
+        forceRefresh
+          ? "🔄 Force refresh: Fetching all InsertBid events using Etherscan API..."
+          : "🔍 No cache found: Fetching InsertBid events using Etherscan API..."
+      );
+
+      // Import Etherscan API functions
+      const { getContractLogs, getLatestBlockNumber } = await import("@/utils/EtherscanAPI");
+
+      // Get the latest block number
+      const latestBlock = await getLatestBlockNumber(networkKey);
+      console.log(`📊 Latest block number: ${latestBlock}`);
+
+      // Get InsertBid event logs using Etherscan API
+      // InsertBid event signature: InsertBid(bytes32 indexed codehash, address program, uint192 bid, uint64 size)
+      const insertBidTopic = "0x" + ethers.id("InsertBid(bytes32,address,uint192,uint64)").slice(2);
+
+      console.log(`🔍 Fetching InsertBid events with topic: ${insertBidTopic}`);
+      toast.loading("Fetching contract events using Etherscan API...", { id: "etherscan-fetch" });
+
+      const logs = await getContractLogs(
+        networkKey,
+        0, // from block
+        latestBlock, // to block
+        insertBidTopic // topic0 for InsertBid events
+      );
+
+      console.log(`📊 Found ${logs.length} InsertBid events`);
+
+      if (logs.length === 0) {
+        console.log("❌ No InsertBid events found");
+        toast.error("No InsertBid events found. Make sure bids have been placed on this contract.");
+        setProgramAddresses([]);
+        setGasAnalysisData({
+          totalGasWithoutCache: 0,
+          totalGasWithCache: 0,
+          totalGasSaved: 0,
+        });
+        return;
+      }
+
+      // Extract program addresses from logs
+      const uniquePrograms: string[] = Array.from(
+        new Set(
+          logs.map((log: any) => {
+            // Program address is in the second topic (topic1) for indexed parameters
+            // or in the data field for non-indexed parameters
+            try {
+              // Try to decode the log data
+              const decoded = ethers.AbiCoder.defaultAbiCoder().decode(
+                ["address", "uint192", "uint64"], // program, bid, size
+                log.data
+              );
+              return decoded[0]; // program address
+            } catch (error) {
+              console.warn("Failed to decode log:", log, error);
+              return null;
+            }
+          }).filter(Boolean)
+        )
+      );
+
+      console.log(`📋 Found ${uniquePrograms.length} unique program addresses:`);
+      uniquePrograms.forEach((addr, index) => {
+        console.log(`  ${index + 1}. ${addr}`);
+      });
+
+      setProgramAddresses(uniquePrograms);
+      setLastFetchedBlock(BigInt(latestBlock));
+
+      // Cache the program data
+      setCachedProgramData(uniquePrograms, BigInt(latestBlock));
+
+      // Filter out invalid addresses before gas analysis
+      const validPrograms = uniquePrograms.filter(addr =>
+        addr &&
+        addr !== "0x0000000000000000000000000000000000000000" &&
+        isValidEthAddress(addr)
+      );
+
+      if (validPrograms.length > 0) {
+        console.log(`📋 Processing ${validPrograms.length} valid program addresses for gas analysis`);
+        await calculateGasAnalysis(validPrograms);
+      } else {
+        console.log("ℹ️ No valid program addresses found for gas analysis");
+        if (uniquePrograms.length > 0) {
+          toast.error(`Found ${uniquePrograms.length} program addresses but none are valid for gas analysis`);
+        } else {
+          toast.error("No program addresses extracted from events");
+        }
+      }
+
+      toast.success(`Found ${uniquePrograms.length} program addresses using Etherscan API!`, {
+        id: "etherscan-fetch"
+      });
+
+    } catch (error: any) {
+      console.error("❌ Error fetching program addresses:", error);
+      toast.error(`Failed to fetch program addresses: ${error.message}`);
+    } finally {
+      setLoadingGasAnalysis(false);
+    }
   };
 
   const fetchProgramAddressesWithProvider = async (forceRefresh = false, rpcType: "infura" | "alchemy" | "default" = "infura") => {
@@ -558,7 +715,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
 
     try {
       setLoadingGasAnalysis(true);
-      
+
       console.log(`🚀 Starting fetchProgramAddresses for network: ${networkKey} using ${rpcType.toUpperCase()} RPC`);
       console.log(`📋 Contract address: ${config.contracts.cacheManager.address}`);
       console.log(`🌐 Network: ${config.chainName}`);
@@ -604,9 +761,6 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
           }, 1000);
 
           setLoadingGasAnalysis(false);
-          toast.success(
-            `Loaded cached data: ${cachedData.programAddresses.length} programs`
-          );
           return;
         }
       }
@@ -636,7 +790,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
         "🎯 Method 1: Attempting to fetch all events in single request..."
       );
       toast.loading("Attempting to fetch all contract events...", {
-        id: "chunk-scan",
+        id: "provider-scan",
       });
 
       try {
@@ -702,7 +856,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
           `✅ Success! Found ${allLogs.length} events in single request`
         );
         toast.success(`Found ${allLogs.length} events in optimized scan!`, {
-          id: "chunk-scan",
+          id: "provider-scan",
         });
       } catch (error: any) {
         console.warn(
@@ -710,7 +864,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
           error.message
         );
         toast.loading("Single request failed, using chunked approach...", {
-          id: "chunk-scan",
+          id: "provider-scan",
         });
 
         // Method 2: Fall back to chunked scanning
@@ -734,7 +888,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       );
       toast.success(
         `Comprehensive scan complete! Found ${uniqueLogs.length} total events.`,
-        { id: "chunk-scan" }
+        { id: "provider-scan" }
       );
 
       if (uniqueLogs.length === 0) {
@@ -748,7 +902,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
         if ('rpc' in config) {
           console.log(`   - RPC: ${config.rpc}`);
         }
-        
+
         // Trigger RPC fallback when no events are found
         if (rpcType === "infura") {
           console.log("🔄 No events found with Infura, trying Alchemy...");
@@ -759,9 +913,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
         } else {
           // If we're already using the default RPC and still no events, show error
           console.log("❌ No InsertBid events found with any RPC provider");
-          toast.error(
-            "No InsertBid events found. Make sure bids have been placed on this contract."
-          );
+          // Error message handled by main fetchProgramAddresses function
           setProgramAddresses([]);
           setGasAnalysisData({
             totalGasWithoutCache: 0,
@@ -810,7 +962,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
         await calculateGasAnalysis(uniquePrograms);
       } else {
         console.log("ℹ️ No program addresses found");
-        toast.error("No program addresses extracted from events");
+        // Error message handled by main fetchProgramAddresses function
       }
     } catch (error: any) {
       console.error("❌ Error fetching program addresses:", error);
@@ -820,16 +972,16 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
         error: error.message,
         stack: error.stack
       });
-      
+
       // Handle specific error types
       if (error.message.includes('429') || error.message.includes('Too Many Requests')) {
         toast.error("Rate limit exceeded. Please try again in a few minutes.");
       } else if (error.message.includes('CORS')) {
         toast.error("Network access issue. Please check your connection.");
       } else {
-        toast.error(`Failed to fetch program addresses: ${error.message}`);
+        // Error message handled by main fetchProgramAddresses function
       }
-      
+
       // Re-throw the error to trigger fallback mechanism
       throw error;
     } finally {
@@ -881,6 +1033,9 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
                 error.message
               );
               failedCalculations.push(address);
+
+              // Don't throw error for individual contract failures
+              // This allows the batch to continue processing other contracts
               return { success: false, address, error: error.message };
             }
           })
@@ -965,17 +1120,17 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
         try {
           console.log(`🚀 Initializing CacheManager for network: ${networkKey}`);
           toast.loading("Loading cache data...", { id: "initialization" });
-          
+
           // Validate network before making calls
           const config = cacheManagerConfig[networkKey];
           if (!config) {
             throw new Error(`Invalid network key: ${networkKey}`);
           }
-          
+
           console.log(`📋 Using contract address: ${config.contracts.cacheManager.address}`);
-          
-          // Try different RPC providers with fallback mechanism
-          await tryFetchDataWithFallback();
+
+          // Fetch all data using Etherscan API
+          await fetchAllDataWithEtherscan();
 
           toast.success("Cache data loaded successfully!", {
             id: "initialization",
@@ -983,7 +1138,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
         } catch (error: any) {
           console.error("❌ Initialization failed:", error);
           let errorMessage = "Failed to initialize cache data";
-          
+
           if (error.message.includes('could not decode result data')) {
             errorMessage = "Network connection issue. Please check your wallet connection.";
           } else if (error.message.includes('Invalid network key')) {
@@ -998,122 +1153,32 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
     }
   }, [isConnected, isAuthInitialized, networkKey]); // Add networkKey dependency
 
-  // Function to try fetching data with RPC fallback mechanism
-  const tryFetchDataWithFallback = async () => {
-    const rpcProviders = ["infura", "alchemy", "default"] as const;
-    const timeout = 10000; // 10 seconds timeout
-    
-    // Step 1: Try to fetch regular data with fallback (with timeout)
-    let regularDataSuccess = false;
-    let successfulRpcForRegularData: "infura" | "alchemy" | "default" | null = null;
-    
-    for (const rpcType of rpcProviders) {
-      try {
-        console.log(`🔄 Trying ${rpcType.toUpperCase()} RPC for regular data...`);
-        
-        // Check if this RPC provider is available
-        const config = cacheManagerConfig[networkKey];
-        if (!config?.rpc || typeof config.rpc !== 'object' || !config.rpc[rpcType]) {
-          console.log(`⚠️ ${rpcType.toUpperCase()} RPC not available, skipping...`);
-          continue;
-        }
-        
-        // Fetch regular data with timeout
-        console.log(`📡 Fetching regular data with ${timeout}ms timeout...`);
-        const regularDataPromise = fetchRegularDataWithProvider(rpcType);
-        const regularDataTimeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error(`Regular data timeout after ${timeout}ms`)), timeout)
-        );
-        
-        // Race between regular data fetch and timeout
-        await Promise.race([regularDataPromise, regularDataTimeoutPromise]);
-        console.log(`✅ Regular data fetched successfully using ${rpcType.toUpperCase()} RPC`);
-        
-        regularDataSuccess = true;
-        successfulRpcForRegularData = rpcType;
-        break; // Exit the loop since regular data is fetched successfully
-        
-      } catch (error: any) {
-        console.warn(`❌ Failed to fetch regular data using ${rpcType.toUpperCase()} RPC:`, error.message);
-        
-        if (rpcType === "default") {
-          // If even the default RPC fails for regular data, throw the error
-          throw new Error(`All RPC providers failed for regular data. Last error: ${error.message}`);
-        }
-        
-        // Continue to next RPC provider
-        console.log(`🔄 Switching to next RPC provider for regular data...`);
-      }
-    }
-    
-    if (!regularDataSuccess) {
-      throw new Error("Failed to fetch regular data with any RPC provider");
-    }
-    
-    // Step 2: Try to fetch program addresses with fallback (without timeout)
-    let programAddressesSuccess = false;
-    let successfulRpcForProgramAddresses: "infura" | "alchemy" | "default" | null = null;
-    
-    for (const rpcType of rpcProviders) {
-      try {
-        console.log(`🔄 Trying ${rpcType.toUpperCase()} RPC for program addresses...`);
-        
-        // Check if this RPC provider is available
-        const config = cacheManagerConfig[networkKey];
-        if (!config?.rpc || typeof config.rpc !== 'object' || !config.rpc[rpcType]) {
-          console.log(`⚠️ ${rpcType.toUpperCase()} RPC not available, skipping...`);
-          continue;
-        }
-        
-        // Fetch program addresses without timeout
-        console.log(`📡 Fetching program addresses without timeout...`);
-        await fetchProgramAddressesWithProviderOnly(rpcType);
-        console.log(`✅ Program addresses fetched successfully using ${rpcType.toUpperCase()} RPC`);
-        
-        programAddressesSuccess = true;
-        successfulRpcForProgramAddresses = rpcType;
-        break; // Exit the loop since program addresses are fetched successfully
-        
-      } catch (error: any) {
-        console.warn(`❌ Failed to fetch program addresses using ${rpcType.toUpperCase()} RPC:`, error.message);
-        
-        if (rpcType === "default") {
-          // If even the default RPC fails for program addresses, show error but don't throw
-          console.error(`❌ All RPC providers failed for program addresses. Last error: ${error.message}`);
-          toast.error("Failed to fetch program addresses with any RPC provider. Regular data was loaded successfully.");
-          break; // Exit the loop but don't throw error since regular data is already loaded
-        }
-        
-        // Continue to next RPC provider
-        console.log(`🔄 Switching to next RPC provider for program addresses...`);
-      }
-    }
-    
-    if (regularDataSuccess && programAddressesSuccess) {
-      console.log(`✅ All data fetched successfully! Regular data: ${successfulRpcForRegularData?.toUpperCase()}, Program addresses: ${successfulRpcForProgramAddresses?.toUpperCase()}`);
-    } else if (regularDataSuccess && !programAddressesSuccess) {
-      console.log(`⚠️ Regular data loaded successfully, but program addresses failed. Regular data: ${successfulRpcForRegularData?.toUpperCase()}`);
-    }
-  };
+  // Function to fetch all data using Etherscan API
+  const fetchAllDataWithEtherscan = async () => {
+    console.log(`📡 Fetching all data using Etherscan API for ${networkKey}`);
 
-  // Function to fetch regular data (with timeout) using a specific RPC provider
-  const fetchRegularDataWithProvider = async (rpcType: "infura" | "alchemy" | "default") => {
-    console.log(`📡 Fetching regular data using ${rpcType.toUpperCase()} RPC provider`);
-    
-    // Sequential calls to avoid race conditions
-    await fetchEntriesWithProvider(false, rpcType);
-    await fetchCacheSizeWithProvider(false, rpcType);
-    await fetchDecayWithProvider(false, rpcType);
-    await fetchQueueSizeWithProvider(false, rpcType);
-    await checkIsPausedWithProvider(false, rpcType);
-  };
+    try {
+      // Fetch regular contract data
+      console.log(`🔄 Fetching regular contract data...`);
+      await Promise.all([
+        fetchEntries(false),
+        fetchCacheSize(false),
+        fetchDecay(false),
+        fetchQueueSize(false),
+        checkIsPaused(false)
+      ]);
 
-  // Function to fetch program addresses (without timeout) using a specific RPC provider
-  const fetchProgramAddressesWithProviderOnly = async (rpcType: "infura" | "alchemy" | "default") => {
-    console.log(`📡 Fetching program addresses using ${rpcType.toUpperCase()} RPC provider (no timeout)`);
-    
-    // Fetch program addresses and calculate gas analysis - no timeout
-    await fetchProgramAddressesWithProvider(false, rpcType);
+      console.log(`✅ Regular contract data fetched successfully`); 
+
+      // Fetch program addresses and gas analysis
+      console.log(`🔄 Fetching program addresses...`);
+      await fetchProgramAddresses(false);
+
+      console.log(`✅ All data fetched successfully using Etherscan API`);
+    } catch (error: any) {
+      console.error("❌ Error fetching data with Etherscan API:", error);
+      throw error;
+    }
   };
 
   // Set up periodic incremental updates for live data
@@ -1133,18 +1198,13 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
   }, [isConnected, isAuthInitialized, lastFetchedBlock, loadingGasAnalysis, isIncrementalUpdate]);
 
   const fetchCacheSize = async (showToast = true) => {
-    return fetchCacheSizeWithProvider(showToast, "infura");
-  };
-
-  const fetchCacheSizeWithProvider = async (showToast = true, rpcType: "infura" | "alchemy" | "default" = "infura") => {
     try {
       setIsLoading(true);
-      console.log(`🔄 Fetching cache size for network: ${networkKey} using ${rpcType.toUpperCase()} RPC`);
-      
-      const contract = await getContract(networkKey, rpcType);
-      const size = await safeContractCall(contract, 'cacheSize', [], '0');
-      
-      if (size !== '0') {
+      console.log(`🔄 Fetching cache size for network: ${networkKey} using Etherscan API`);
+
+      const size = await getCacheSize(networkKey);
+
+      if (size && size !== '0') {
         setCacheSize(size.toString());
         console.log(`✅ Cache size set to: ${size}`);
       } else {
@@ -1158,7 +1218,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       if (showToast) {
         toast.error(errorMessage);
       }
-      throw error; // Re-throw to trigger fallback
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -1179,18 +1239,13 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
 
   // Fetch Decay
   const fetchDecay = async (showToast = true) => {
-    return fetchDecayWithProvider(showToast, "infura");
-  };
-
-  const fetchDecayWithProvider = async (showToast = true, rpcType: "infura" | "alchemy" | "default" = "infura") => {
     try {
       setIsLoading(true);
-      console.log(`🔄 Fetching decay for network: ${networkKey} using ${rpcType.toUpperCase()} RPC`);
-      
-      const contract = await getContract(networkKey, rpcType);
-      const decay = await safeContractCall(contract, 'decay', [], '0');
-      
-      if (decay !== '0') {
+      console.log(`🔄 Fetching decay for network: ${networkKey} using Etherscan API`);
+
+      const decay = await getDecay(networkKey);
+
+      if (decay && decay !== '0') {
         setDecay(decay.toString());
         console.log(`✅ Decay set to: ${decay}`);
       } else {
@@ -1204,7 +1259,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       if (showToast) {
         toast.error(errorMessage);
       }
-      throw error; // Re-throw to trigger fallback
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -1212,18 +1267,13 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
 
   // Fetch Queue Size
   const fetchQueueSize = async (showToast = true) => {
-    return fetchQueueSizeWithProvider(showToast, "infura");
-  };
-
-  const fetchQueueSizeWithProvider = async (showToast = true, rpcType: "infura" | "alchemy" | "default" = "infura") => {
     try {
       setIsLoading(true);
-      console.log(`🔄 Fetching queue size for network: ${networkKey} using ${rpcType.toUpperCase()} RPC`);
-      
-      const contract = await getContract(networkKey, rpcType);
-      const size = await safeContractCall(contract, 'queueSize', [], '0');
-      
-      if (size !== '0') {
+      console.log(`🔄 Fetching queue size for network: ${networkKey} using Etherscan API`);
+
+      const size = await getQueueSize(networkKey);
+
+      if (size && size !== '0') {
         setQueueSize(size.toString());
         console.log(`✅ Queue size set to: ${size}`);
       } else {
@@ -1237,7 +1287,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       if (showToast) {
         toast.error(errorMessage);
       }
-      throw error; // Re-throw to trigger fallback
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -1245,17 +1295,12 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
 
   // Check if Paused
   const checkIsPaused = async (showToast = true) => {
-    return checkIsPausedWithProvider(showToast, "infura");
-  };
-
-  const checkIsPausedWithProvider = async (showToast = true, rpcType: "infura" | "alchemy" | "default" = "infura") => {
     try {
       setIsLoading(true);
-      console.log(`🔄 Checking pause status for network: ${networkKey} using ${rpcType.toUpperCase()} RPC`);
-      
-      const contract = await getContract(networkKey, rpcType);
-      const paused = await safeContractCall(contract, 'isPaused', [], false);
-      
+      console.log(`🔄 Checking pause status for network: ${networkKey} using Etherscan API`);
+
+      const paused = await getIsPaused(networkKey);
+
       setIsPaused(Boolean(paused));
       console.log(`✅ Pause status set to: ${paused}`);
     } catch (error: any) {
@@ -1266,7 +1311,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       if (showToast) {
         toast.error(errorMessage);
       }
-      throw error; // Re-throw to trigger fallback
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -1317,38 +1362,26 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
   };
 
   const fetchEntries = async (showToast = true) => {
-    return fetchEntriesWithProvider(showToast, "infura");
-  };
-
-  const fetchEntriesWithProvider = async (showToast = true, rpcType: "infura" | "alchemy" | "default" = "infura") => {
     try {
-      console.log(`🔄 Fetching entries for network: ${networkKey} using ${rpcType.toUpperCase()} RPC`);
+      console.log(`🔄 Fetching entries for network: ${networkKey} using Etherscan API`);
       setIsLoading(true);
-      
-      const contract = await getContract(networkKey, rpcType);
-      
-      // Fetch raw entries from the contract with retry
-      const rawEntries: any = await retryWithBackoff(async () => {
-        const entries = await contract.getEntries();
-        
-        // Validate entries
-        if (!entries || (Array.isArray(entries) && entries.length === 0)) {
-          console.log(`⚠️ getEntries returned empty result`);
-          return [];
-        }
-        
-        return entries;
-      });
-      
-      console.log("Raw entries object:", rawEntries);
 
-      const formattedEntries = formatProxyResult(rawEntries);
-      console.log("Formatted entries:", formattedEntries);
+      const rawEntries = await getEntries(networkKey);
+
+      console.log("Raw entries from Etherscan API:", rawEntries);
+
+      // Format entries to match expected structure
+      const formattedEntries = rawEntries.map((entry: any) => ({
+        codeHash: entry.codeHash || "0x0000000000000000000000000000000000000000000000000000000000000000",
+        size: entry.size ? BigInt(entry.size) : BigInt(0),
+        ethBid: entry.ethBid || "0",
+        bid: entry.ethBid || "0" // Add bid field for compatibility
+      }));
 
       const numberOfEntries = formattedEntries.length;
       setEntriesCount(numberOfEntries);
       setEntries(formattedEntries);
-      
+
       console.log(`✅ Entries fetched successfully: ${numberOfEntries} entries`);
     } catch (error: any) {
       console.error("Error fetching entries:", error);
@@ -1358,7 +1391,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       if (showToast) {
         toast.error(errorMessage);
       }
-      throw error; // Re-throw to trigger fallback
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -1367,9 +1400,9 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
   const chartData = useMemo(() => {
     return entries.map((entry: any, index: any) => ({
       index: index + 1, // Use index + 1 for x-axis
-      codeHash: entry.codeHash.slice(0, 6) + "...",
-      size: Number(entry.size),
-      bid: Number(ethers.formatEther(entry.bid)),
+      codeHash: entry.codeHash ? entry.codeHash.slice(0, 6) + "..." : "Unknown",
+      size: Number(entry.size || 0),
+      bid: entry.bid ? Number(ethers.formatEther(entry.bid)) : 0,
     }));
   }, [entries]);
 
@@ -1408,16 +1441,18 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
         console.log(`Contract might not be a Stylus contract or doesn't exist`);
       }
 
-      // Get minimum bid from contract
-      const contract = await getContract(networkKey);
+      // Get minimum bid from contract using Etherscan API
       let minBidRequired = "0.0";
       try {
-        const minBid = await contract.getMinBid(contractAddress);
+        const minBid = await getMinBid(networkKey);
         minBidRequired = ethers.formatEther(minBid);
         console.log(`Min bid required: ${minBidRequired} ETH`);
       } catch (minBidError: any) {
         console.log(`Could not get minimum bid: ${minBidError.message}`);
       }
+
+      // Get contract instance for placing bid
+      const contract = await getContract(networkKey);
 
       // Place the bid
       const tx = await contract.placeBid(contractAddress, {
@@ -1577,7 +1612,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       (entry: any) =>
         entry.codeHash.toLowerCase().includes(searchTerm.toLowerCase()) ||
         entry.size.toString().includes(searchTerm) ||
-        ethers.formatEther(BigInt(entry.bid)).includes(searchTerm)
+        (entry.bid ? ethers.formatEther(BigInt(entry.bid)) : "0").includes(searchTerm)
     );
   }, [sortedEntries, searchTerm]);
 
@@ -1591,7 +1626,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
     const bids = entries.map((entry: any, index: any) => ({
       index: index + 1,
       codeHash: entry.codeHash.slice(0, 6) + "...",
-      currentBid: Number(ethers.formatEther(entry.bid)),
+      currentBid: entry.bid ? Number(ethers.formatEther(entry.bid)) : 0,
     }));
 
     // Calculate running minimum bid
