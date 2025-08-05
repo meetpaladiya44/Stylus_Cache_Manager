@@ -29,7 +29,10 @@ interface LeaderboardResponse {
   pagination?: {
     total: number;
     limit: number;
+    page: number;
+    totalPages: number;
     hasMore: boolean;
+    hasPrev: boolean;
   };
   error?: string;
   message?: string;
@@ -48,7 +51,9 @@ export async function GET(
     const network = searchParams.get("network") || "all";
     const sortBy = searchParams.get("sortBy") || "gasSaved";
     const sortOrder = searchParams.get("sortOrder") || "desc";
-    const limit = parseInt(searchParams.get("limit") || "100");
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "50");
+    const skip = (page - 1) * limit;
 
     // Build query filter
     const query: { network?: string } = {};
@@ -66,10 +71,11 @@ export async function GET(
       sortObj.gasSaved = -1; // Default sort by gas saved descending
     }
 
-    // Execute query with sorting and limit
+    // Execute query with sorting, skip, and limit
     const contracts = await collection
       .find(query)
       .sort(sortObj)
+      .skip(skip)
       .limit(limit)
       .toArray();
 
@@ -117,7 +123,10 @@ export async function GET(
       pagination: {
         total: totalCount,
         limit,
-        hasMore: totalCount > limit,
+        page,
+        totalPages: Math.ceil(totalCount / limit),
+        hasMore: page * limit < totalCount,
+        hasPrev: page > 1,
       },
     });
   } catch (error) {

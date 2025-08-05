@@ -234,7 +234,7 @@ const CacheSavingsAnalysis: React.FC<CacheSavingsAnalysisProps> = ({
             </span>
           )}
         </div>
-        <p className="text-xs text-gray-500 mt-1">
+        <p className="text-xs text-gray-400 mt-1">
           Data based on {lastFetchedBlock ? `blockchain data up to block ${lastFetchedBlock.toString()}` : "recent events from the cache manager contract"} •
           {isIncrementalUpdate ? " Live updating..." : " Auto-updates every minute"}
         </p>

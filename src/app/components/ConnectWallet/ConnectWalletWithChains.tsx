@@ -191,7 +191,7 @@ export function ConnectWallet() {
             <div className="absolute top-full right-0 mt-2 w-64 bg-white shadow-lg rounded-lg border border-gray-200 z-50">
               <div className="p-4">
                 <div className="mb-4">
-                  <p className="text-sm text-gray-500">Connected as:</p>
+                  <p className="text-sm text-gray-400">Connected as:</p>
                   <p className="font-semibold">
                     {user?.google?.email ||
                       user?.farcaster?.displayName ||
