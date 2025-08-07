@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
       );
 
       const verifiedWallet = linkedWallets.find(
-        (wallet) => wallet.address === requestWalletAddress
+        (wallet) => wallet.type === "wallet" && wallet.address === requestWalletAddress
       );
 
       if (!verifiedWallet) {
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
 
       // Create new delegate document
       const newDocument = {
-        address: requestWalletAddress, // Use the exact wallet address
+        address: requestWalletAddress.toLowerCase(), // Use the exact wallet address
         createdAt,
         image: null,
         displayName: null,

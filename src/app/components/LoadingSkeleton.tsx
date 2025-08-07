@@ -97,7 +97,7 @@ const LoadingSkeleton: React.FC<LoadingSkeletonProps> = ({
             </div>
             
             {/* Progress bar skeleton */}
-            <div className="w-full h-1 bg-gray-700 rounded-full animate-pulse"></div>
+            <div className="w-full h-1 bg-gray-700 rounded-full"></div>
             
             {/* Pagination buttons skeleton */}
             <div className="flex justify-between items-center">

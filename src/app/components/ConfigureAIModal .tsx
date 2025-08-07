@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Brain, Settings, Loader, CirclePlus } from "lucide-react";
 import { BrowserProvider, parseEther, Contract, Eip1193Provider } from "ethers";
 import { toast, Toaster } from "react-hot-toast";
+import { useAccount } from "wagmi";
 
 import { DashboardData } from "../../../types";
 
@@ -22,15 +23,17 @@ const VAULT_ABI = [
   },
 ];
 
+const MINIMUM_BALANCE_ETH = "0.000275"; // Equivalent to 1 USDC
+
 const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
   isOpen,
   onClose,
   onUpdateData,
 }) => {
-  const [contractAddress, setContractAddress] = useState<string>("");
-  const [monthlyBid, setMonthlyBid] = useState<string>("");
+  const { address: userWalletAddress } = useAccount();
+  const [balanceAmount, setBalanceAmount] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [addressError, setAddressError] = useState<string>("");
+  const [balanceError, setBalanceError] = useState<string>("");
 
   // Use useEffect to disable scrolling when modal is open
   useEffect(() => {
@@ -49,98 +52,160 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
 
   if (!isOpen) return null;
 
-  const isValidEthAddress = (address: string): boolean => {
-    return /^0x[a-fA-F0-9]{40}$/.test(address);
-  };
+  const handleBalanceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setBalanceAmount(value);
 
-  const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const address = e.target.value;
-    setContractAddress(address);
-
-    if (!address) {
-      setAddressError("Contract address is required");
-    } else if (!isValidEthAddress(address)) {
-      setAddressError("Invalid Ethereum address format");
+    if (!value) {
+      setBalanceError("Balance amount is required");
+    } else if (isNaN(parseFloat(value)) || parseFloat(value) <= 0) {
+      setBalanceError("Balance amount must be greater than 0");
+    } else if (parseFloat(value) < parseFloat(MINIMUM_BALANCE_ETH)) {
+      setBalanceError(
+        `Minimum balance required is ${MINIMUM_BALANCE_ETH} ETH (equivalent to 1 USDC)`
+      );
     } else {
-      setAddressError("");
+      setBalanceError("");
     }
   };
 
   const handleConfigure = async () => {
     setIsLoading(true);
-    let shouldUpdateData = false;
+    toast.loading("Processing deposit...", { id: "deposit-loading" });
 
     try {
-      // Check if MetaMask is available
-      if (!window.ethereum) {
-        toast.error("MetaMask is not installed. Please install MetaMask to continue.");
+      // Validate user wallet address
+      if (!userWalletAddress) {
+        toast.error("Please connect your wallet first", {
+          id: "deposit-loading",
+        });
         return;
       }
-
+      // Wallet address format check
+      if (!/^0x[a-fA-F0-9]{40}$/.test(userWalletAddress)) {
+        toast.error("Invalid wallet address format", { id: "deposit-loading" });
+        return;
+      }
+      // Check if MetaMask is available
+      if (!window.ethereum) {
+        toast.error(
+          "MetaMask is not installed. Please install MetaMask to continue.",
+          { id: "deposit-loading" }
+        );
+        return;
+      }
       // Type assertion for ethereum provider
       const ethereum = window.ethereum as unknown as Eip1193Provider;
-
       // Request account access
       await ethereum.request({ method: "eth_requestAccounts" });
-
       // Create provider with proper type checking
       const provider = new BrowserProvider(ethereum);
       const signer = await provider.getSigner();
       const walletAddress = await signer.getAddress();
-
-      // Send transaction
+      // Get network information
+      const network = await provider.getNetwork();
+      let networkName = network.name;
+      if (networkName === "arbitrum") networkName = "arbitrum-one";
+      console.log("networkName", networkName);
+      // Validate network - only allow arbitrum-sepolia and arbitrum-one
+      if (networkName !== "arbitrum-sepolia" && networkName !== "arbitrum-one") {
+        toast.error(
+          "Wrong network detected! Please switch to Arbitrum Sepolia or Arbitrum One mainnet to continue.",
+          { id: "deposit-loading" }
+        );
+        return;
+      }
+      // Validate balance values are numeric and > 0
+      if (
+        isNaN(parseFloat(balanceAmount)) ||
+        parseFloat(balanceAmount) <= 0
+      ) {
+        toast.error("Balance amount must be a valid number greater than 0", { id: "deposit-loading" });
+        return;
+      }
       // Create contract instance for the ConfigVault
       const vaultContract = new Contract(
         VAULT_CONTRACT_ADDRESS,
         VAULT_ABI,
         signer
       );
-
-      // First, deposit the bid amount to the ConfigVault
+      toast.loading("Confirming transaction...", { id: "deposit-loading" });
+      // Deposit the balance amount to the ConfigVault
       const depositTx = await vaultContract.deposit({
-        value: parseEther(monthlyBid),
+        value: parseEther(balanceAmount),
         gasLimit: 100000,
       });
-
-      // Wait for deposit confirmation
-      await depositTx.wait();
-      toast.success("Deposit successful!");
-
-      // Store the user's contract address (you can use this for your application's logic)
-      console.log("User's contract address:", contractAddress);
-      // Add any additional logic needed for the user's contract address here
-
-      shouldUpdateData = true;
-
-      if (shouldUpdateData) {
-        // Call API with wallet address
-        const response = await fetch("/api/profile", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-wallet-address": walletAddress,
-          },
-          body: JSON.stringify({ bidAmount: parseFloat(monthlyBid) }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch AI metrics");
-        }
-
-        const metrics = await response.json();
-        onUpdateData(metrics);
-
-        setContractAddress("");
-        setMonthlyBid("");
-        onClose();
+      // Transaction hash format check
+      if (!/^0x[a-fA-F0-9]{64}$/.test(depositTx.hash)) {
+        toast.error("Invalid transaction hash format", { id: "deposit-loading" });
+        return;
       }
-    } catch (error: any) {
-      if (error.code === 4001 || error.message.includes("user rejected")) {
-        toast.error("Transaction cancelled by user");
-      } else if (error.message.includes("MetaMask")) {
-        toast.error("MetaMask error: " + error.message);
+      toast.loading("Waiting for transaction confirmation...", {
+        id: "deposit-loading",
+      });
+      // Wait for deposit confirmation
+      const receipt = await depositTx.wait();
+      // Calculate gas fees
+      const gasUsed = receipt.gasUsed;
+      const gasPrice = receipt.gasPrice || depositTx.gasPrice;
+      const totalGasFees = gasUsed * gasPrice;
+      // Store transaction data in MongoDB
+      const transactionData = {
+        userWalletAddress: walletAddress,
+        txHash: depositTx.hash,
+        network: networkName,
+        minBalanceValue: balanceAmount,
+        timestamp: new Date().toISOString(),
+        dynamicUpdatedBalVal: balanceAmount,
+        totalGasCost: totalGasFees.toString(),
+      };
+
+      // Call MongoDB API to store transaction data
+      const response = await fetch("/api/balance/deposit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(transactionData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.warn("Failed to store transaction data in MongoDB:", errorData);
+        toast.error(`Database error: ${errorData.error || 'Failed to store transaction data'}`, {
+          id: "deposit-loading"
+        });
+        return;
       } else {
-        toast.error("An error occurred: " + (error.message || "Unknown error"));
+        console.log("Transaction data stored successfully in MongoDB");
+      }
+
+      toast.success(
+        "Balance added successfully! Automation service is now configured.",
+        { id: "deposit-loading" }
+      );
+
+      // Clear form and close modal
+      setBalanceAmount("");
+      onClose();
+    } catch (error: any) {
+      console.error("Error in handleConfigure:", error);
+
+      if (error.code === 4001 || error.message.includes("user rejected")) {
+        toast.error("Transaction cancelled by user", { id: "deposit-loading" });
+      } else if (error.message.includes("insufficient funds")) {
+        toast.error("Insufficient funds for transaction", {
+          id: "deposit-loading",
+        });
+      } else if (error.message.includes("MetaMask")) {
+        toast.error("MetaMask error: " + error.message, {
+          id: "deposit-loading",
+        });
+      } else {
+        toast.error(
+          "Transaction failed: " + (error.message || "Unknown error"),
+          { id: "deposit-loading" }
+        );
       }
     } finally {
       setIsLoading(false);
@@ -160,7 +225,9 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
         <div className="flex items-center justify-between border-b border-zinc-700/50 pb-4">
           <div className="flex items-center gap-3">
             <Settings className="w-7 h-7 text-blue-400 bg-blue-500/20 rounded-full p-1 shadow border border-blue-500/30" />
-            <h2 className="text-2xl font-bold text-zinc-100 tracking-tight">Add Balance</h2>
+            <h2 className="text-2xl font-bold text-zinc-100 tracking-tight">
+              Add Balance
+            </h2>
           </div>
           <button
             onClick={onClose}
@@ -185,38 +252,33 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
 
         {/* Form */}
         <div className="space-y-5">
-          <div className="space-y-2 relative">
-            <label className="block text-sm font-semibold text-zinc-300 flex items-center gap-1">
-              Contract Address
-              <span className="text-xs text-zinc-500" title="The address of your deployed contract.">(?)</span>
-            </label>
-            <input
-              type="text"
-              placeholder="0x..."
-              value={contractAddress}
-              onChange={handleAddressChange}
-              className={`w-full px-4 py-3 border ${addressError ? "border-red-500/50" : "border-zinc-600/50"} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all bg-zinc-700/50 hover:bg-zinc-700/70 text-zinc-100 placeholder-zinc-400 shadow-sm`}
-            />
-            {addressError && (
-              <p className="text-xs text-red-400 mt-1">{addressError}</p>
-            )}
-            <p className="text-xs text-zinc-500 mt-1">Enter the Ethereum address of your contract.</p>
-          </div>
-
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-zinc-300 flex items-center gap-1">
-              Monthly Bid Budget (in ETH)
-              <span className="text-xs text-zinc-500" title="The maximum ETH you want to allocate per month.">(?)</span>
+              Balance Amount (in ETH)
+              <span
+                className="text-xs text-zinc-500"
+                title="Minimum 0.000275 ETH required for automation."
+              >
+                (?)
+              </span>
             </label>
             <input
               type="number"
-              step="0.1"
-              placeholder="0.5"
-              value={monthlyBid}
-              onChange={(e) => setMonthlyBid(e.target.value)}
-              className="w-full px-4 py-3 border border-zinc-600/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all bg-zinc-700/50 hover:bg-zinc-700/70 text-zinc-100 placeholder-zinc-400 shadow-sm"
+              step="0.000001"
+              placeholder={MINIMUM_BALANCE_ETH}
+              value={balanceAmount}
+              onChange={handleBalanceChange}
+              className={`w-full px-4 py-3 border ${
+                balanceError ? "border-red-500/50" : "border-zinc-600/50"
+              } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all bg-zinc-700/50 hover:bg-zinc-700/70 text-zinc-100 placeholder-zinc-400 shadow-sm`}
             />
-            <p className="text-xs text-zinc-500 mt-1">Set your monthly budget for automated bidding.</p>
+            {balanceError && (
+              <p className="text-xs text-red-400 mt-1">{balanceError}</p>
+            )}
+            <p className="text-xs text-zinc-500 mt-1">
+              Minimum {MINIMUM_BALANCE_ETH} ETH (≈ 1 USDC) required for
+              automation and platform charges.
+            </p>
           </div>
         </div>
 
@@ -230,7 +292,12 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
           </button>
           <button
             onClick={handleConfigure}
-            disabled={isLoading || !!addressError || !contractAddress || !monthlyBid}
+            disabled={
+              isLoading ||
+              !!balanceError ||
+              !balanceAmount ||
+              parseFloat(balanceAmount || "0") < parseFloat(MINIMUM_BALANCE_ETH)
+            }
             className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg hover:from-blue-700 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50 font-medium flex items-center justify-center gap-2"
           >
             {isLoading ? (
@@ -251,10 +318,13 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
         <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 space-y-2">
           <div className="flex items-center gap-2">
             <Brain className="w-4 h-4 text-blue-400" />
-            <span className="text-sm font-semibold text-blue-300">AI Agent Configuration</span>
+            <span className="text-sm font-semibold text-blue-300">
+              Automation Service
+            </span>
           </div>
           <p className="text-xs text-blue-200 leading-relaxed">
-            Your AI agent will automatically manage bidding for the specified contract using your monthly budget allocation.
+            Our backend manages bids and operations using your balance, while
+            also monitoring and mitigating eviction risks automatically
           </p>
         </div>
       </div>

@@ -1,829 +1,478 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useAccount, usePublicClient } from "wagmi";
-import { cacheManagerConfig } from "@/config/CacheManagerConfig";
-import { parseAbiItem, formatEther } from "viem";
-import {
-  Database,
-  TrendingUp,
-  Clock,
-  Wallet,
-  ChevronLeft,
-  ChevronRight,
-  CheckCircle,
-} from "lucide-react";
-import { toast, Toaster } from "react-hot-toast";
-import { getContract, getNetworkKeyByChainId } from "@/utils/CacheManagerUtils";
-import { ConnectWallet } from "../components/ConnectWallet/ConnectWallet";
+import { useState, useEffect } from "react";
+import { useAccount } from "wagmi";
+import { Contract } from "../api/profile/contracts/route";
 
-// Cache keys
-const CACHE_KEY_BIDS = "user_bids_cache_";
-const CACHE_EXPIRY_TIME = 30 * 60 * 1000; // 30 minutes
-
-// Use larger initial block range - 2.5 million blocks
-const INITIAL_BLOCKS_RANGE = 2500000;
-const BATCH_SIZE = 50; // Increased batch size for faster processing
-
-interface BidEvent {
-  blockNumber: bigint;
-  transactionHash: string;
-  args: {
-    codehash: string;
-    program: string;
-    bid: bigint;
-    size: bigint;
-  };
-  timestamp?: number;
+interface BalanceDeposit {
+  _id: string;
+  userWalletAddress: string;
+  txHash: string;
+  network: string;
+  minBalanceValue: string;
+  timestamp: string;
+  dynamicUpdatedBalVal: string;
+  totalGasCost: string;
+  bidCharges?: string;
 }
 
-// Separate interface for serializable version (no BigInt)
-interface SerializableBidEvent {
-  blockNumber: string;
-  transactionHash: string;
-  args: {
-    codehash: string;
-    program: string;
-    bid: string;
-    size: string;
-  };
-  timestamp?: number;
+interface ProfileStats {
+  totalContracts: number;
+  totalGasSaved: string;
+  totalGasUsed: string;
+  activeContracts: number;
 }
 
-interface CacheData {
-  bids: SerializableBidEvent[];
-  timestamp: number;
-  latestBlock: string;
-  earliestFetchedBlock: string;
-}
+type SortField =
+  | "contractAddress"
+  | "network"
+  | "deployedAt"
+  | "evictionThresholdDate"
+  | "gasSaved"
+  | "gasUsed";
+type SortDirection = "asc" | "desc";
 
-// Add a hook to detect the current network
-function useNetworkKey() {
-  const [networkKey, setNetworkKey] = useState<"arbitrum_sepolia" | "arbitrum_one">("arbitrum_sepolia");
-  useEffect(() => {
-    async function detectNetwork() {
-      if (typeof window !== "undefined" && (window as any).ethereum) {
-        const provider = (window as any).ethereum;
-        const chainIdHex = await provider.request({ method: "eth_chainId" });
-        const chainId = parseInt(chainIdHex, 16);
-        const key = getNetworkKeyByChainId(chainId) || "arbitrum_sepolia";
-        setNetworkKey(key as "arbitrum_sepolia" | "arbitrum_one");
-      }
-    }
-    detectNetwork();
-    if (typeof window !== "undefined" && (window as any).ethereum) {
-      (window as any).ethereum.on("chainChanged", () => {
-        detectNetwork();
-      });
-    }
-  }, []);
-  return networkKey;
-}
-
-const UserDashboard = () => {
-  const { address, isConnected } = useAccount();
-  const publicClient = usePublicClient();
-  const [userBids, setUserBids] = useState<BidEvent[]>([]);
+export default function ProfilePage() {
+  const { address, isConnected, isConnecting } = useAccount();
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [balanceDeposits, setBalanceDeposits] = useState<BalanceDeposit[]>([]);
+  const [sortedContracts, setSortedContracts] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasMoreData, setHasMoreData] = useState(true);
-  const [earliestFetchedBlock, setEarliestFetchedBlock] = useState<
-    bigint | null
-  >(null);
-  const [latestFetchedBlock, setLatestFetchedBlock] = useState<bigint | null>(
-    null
-  );
-  const [loadStats, setLoadStats] = useState<{
-    totalEvents: number;
-    userEvents: number;
-    processedBlocks: number;
-  }>({
-    totalEvents: 0,
-    userEvents: 0,
-    processedBlocks: 0,
+  const [sortField, setSortField] = useState<SortField>("deployedAt");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
+  const [stats, setStats] = useState<ProfileStats>({
+    totalContracts: 0,
+    totalGasSaved: "0",
+    totalGasUsed: "0",
+    activeContracts: 0,
   });
-  const [allEntries, setAllEntries] = useState<any[]>([]);
-  const [minBidFromEntries, setMinBidFromEntries] = useState<bigint | null>(
-    null
-  );
-
-  const networkKey = useNetworkKey();
-  const config = cacheManagerConfig[networkKey];
-
-  // Function to fetch all entries from contract
-  const fetchAllEntries = async () => {
-    try {
-      const contract = await getContract(networkKey);
-      const rawEntries = await contract.getEntries();
-
-      // Format entries similar to CacheManagerPage
-      const formatProxyResult = (proxyResult: any) => {
-        const formatValue = (value: any) => {
-          if (typeof value === "bigint") {
-            return value;
-          }
-          return value;
-        };
-
-        const formatEntry = (entry: any) => {
-          return {
-            codeHash: formatValue(entry[0]),
-            size: formatValue(entry[1]),
-            bid: formatValue(entry[2]),
-          };
-        };
-
-        if (
-          Array.isArray(proxyResult) ||
-          (typeof proxyResult === "object" && proxyResult !== null)
-        ) {
-          const keys = Object.keys(proxyResult);
-          if (keys.every((key: any) => !isNaN(key))) {
-            if (keys.length === 3) {
-              return formatEntry(proxyResult);
-            }
-            return keys.map((key) => {
-              const entry = proxyResult[key];
-              return formatEntry(entry);
-            });
-          }
-        }
-        return formatValue(proxyResult);
-      };
-
-      const formattedEntries = formatProxyResult(rawEntries);
-      setAllEntries(
-        Array.isArray(formattedEntries) ? formattedEntries : [formattedEntries]
-      );
-
-      // Find minimum bid
-      const entries = Array.isArray(formattedEntries)
-        ? formattedEntries
-        : [formattedEntries];
-      if (entries.length > 0) {
-        const minBid = entries.reduce((min, entry) => {
-          const bidValue = BigInt(entry.bid);
-          return bidValue < min ? bidValue : min;
-        }, BigInt(entries[0].bid));
-        setMinBidFromEntries(minBid);
-        console.log(
-          `📊 Found minimum bid from ${entries.length} entries: ${minBid}`
-        );
-      }
-    } catch (error) {
-      console.error("Error fetching all entries:", error);
-    }
-  };
 
   useEffect(() => {
-    if (isConnected && address && publicClient) {
-      // Clear data when address changes
-      setUserBids([]);
-      setHasMoreData(true);
-      setEarliestFetchedBlock(null);
-      setLatestFetchedBlock(null);
-
-      // Fetch all entries to get minimum bid
-      fetchAllEntries();
-
-      const cachedData = getCachedData();
-      if (cachedData) {
-        console.log(
-          `✅ Cache hit! Found ${cachedData.bids.length} cached bids`
-        );
-        console.log(
-          `📊 Cache range: ${cachedData.earliestFetchedBlock} to ${cachedData.latestBlock}`
-        );
-
-        // Apply deduplication to cached data as well (safety measure)
-        const uniqueCachedBids = deduplicateBids(cachedData.bids);
-        console.log(
-          `🔧 After cache deduplication: ${uniqueCachedBids.length} unique bids`
-        );
-
-        setUserBids(uniqueCachedBids);
-        setEarliestFetchedBlock(BigInt(cachedData.earliestFetchedBlock));
-        setLatestFetchedBlock(BigInt(cachedData.latestBlock));
-
-        // Only show "Load more" if we haven't scanned from block 0 yet
-        const hasScannedFromGenesis =
-          BigInt(cachedData.earliestFetchedBlock) === BigInt(0);
-        setHasMoreData(
-          !hasScannedFromGenesis &&
-          BigInt(cachedData.earliestFetchedBlock) > BigInt(0)
-        );
-
-        console.log(
-          `🔄 Cache loaded. Has more data: ${!hasScannedFromGenesis &&
-          BigInt(cachedData.earliestFetchedBlock) > BigInt(0)
-          } (scanned from genesis: ${hasScannedFromGenesis})`
-        );
-      } else {
-        console.log(`❌ Cache miss. Starting fresh data fetch`);
-        fetchInitialUserBids();
-      }
+    if (isConnected && address) {
+      fetchUserContracts();
     } else {
-      console.log(`⚠️ Wallet not connected or missing required clients`);
+      // Reset state when wallet is disconnected
+      setContracts([]);
+      setSortedContracts([]);
+      setStats({
+        totalContracts: 0,
+        totalGasSaved: "0",
+        totalGasUsed: "0",
+        activeContracts: 0,
+      });
+      setError(null);
     }
-  }, [address, isConnected, publicClient]);
+  }, [isConnected, address]);
 
-  // Convert BigInt to string for serialization
-  const bidToSerializable = (bid: BidEvent): SerializableBidEvent => {
-    return {
-      blockNumber: bid.blockNumber.toString(),
-      transactionHash: bid.transactionHash,
-      args: {
-        codehash: bid.args.codehash,
-        program: bid.args.program,
-        bid: bid.args.bid.toString(),
-        size: bid.args.size.toString(),
-      },
-      timestamp: bid.timestamp,
-    };
-  };
+  // Sort contracts whenever contracts or sort parameters change
+  useEffect(() => {
+    const sorted = [...contracts].sort((a, b) => {
+      let aValue: any = a[sortField];
+      let bValue: any = b[sortField];
 
-  // Convert string back to BigInt after deserialization
-  const serializableToBid = (serialized: SerializableBidEvent): BidEvent => {
-    return {
-      blockNumber: BigInt(serialized.blockNumber),
-      transactionHash: serialized.transactionHash,
-      args: {
-        codehash: serialized.args.codehash,
-        program: serialized.args.program,
-        bid: BigInt(serialized.args.bid),
-        size: BigInt(serialized.args.size),
-      },
-      timestamp: serialized.timestamp,
-    };
-  };
-
-  const getCachedData = (): {
-    bids: BidEvent[];
-    latestBlock: string;
-    earliestFetchedBlock: string;
-  } | null => {
-    if (!address) return null;
-
-    try {
-      const cacheKey = CACHE_KEY_BIDS + address.toLowerCase();
-      console.log(`🔍 Looking for cache with key: ${cacheKey}`);
-
-      const cachedDataString = localStorage.getItem(cacheKey);
-
-      if (!cachedDataString) {
-        console.log(`❌ No cached data found for this address`);
-        return null;
+      // Handle numeric fields
+      if (sortField === "gasSaved" || sortField === "gasUsed") {
+        aValue = parseInt(aValue || "0");
+        bValue = parseInt(bValue || "0");
       }
 
-      const cachedData = JSON.parse(cachedDataString) as CacheData;
-      const now = Date.now();
-      const cacheAge = now - cachedData.timestamp;
-
-      console.log(
-        `⏰ Cache age: ${Math.round(
-          cacheAge / 1000 / 60
-        )} minutes (expires after ${CACHE_EXPIRY_TIME / 1000 / 60} minutes)`
-      );
-
-      // Check if cache is still valid
-      if (now - cachedData.timestamp <= CACHE_EXPIRY_TIME) {
-        console.log(`✅ Cache is still valid, returning cached data`);
-        // Convert serialized data back to BigInt format
-        const bids = cachedData.bids.map(serializableToBid);
-        return {
-          bids,
-          latestBlock: cachedData.latestBlock,
-          earliestFetchedBlock: cachedData.earliestFetchedBlock,
-        };
+      // Handle date fields
+      if (sortField === "deployedAt" || sortField === "evictionThresholdDate") {
+        aValue = parseISOToUTCTimestamp(aValue);
+        bValue = parseISOToUTCTimestamp(bValue);
       }
 
-      // Cache expired
-      console.log(`⏰ Cache expired, removing old cache`);
-      localStorage.removeItem(cacheKey);
-      return null;
-    } catch (error) {
-      console.error("❌ Error accessing cache:", error);
-      localStorage.removeItem(CACHE_KEY_BIDS + address.toLowerCase());
-      return null;
-    }
-  };
+      if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
+      if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
 
-  const setCachedData = (
-    bids: BidEvent[],
-    latestBlock: bigint,
-    earliestBlock: bigint
-  ) => {
+    setSortedContracts(sorted);
+  }, [contracts, sortField, sortDirection]);
+
+  // Toast auto-hide effect
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  const fetchUserContracts = async () => {
     if (!address) return;
 
     try {
-      const cacheKey = CACHE_KEY_BIDS + address.toLowerCase();
-      console.log(`💾 Caching ${bids.length} bids for address: ${address}`);
-      console.log(`📊 Cache range: ${earliestBlock} to ${latestBlock}`);
-
-      // Convert BigInt to string before serialization
-      const serializableBids = bids.map(bidToSerializable);
-
-      const cacheData: CacheData = {
-        bids: serializableBids,
-        timestamp: Date.now(),
-        latestBlock: latestBlock.toString(),
-        earliestFetchedBlock: earliestBlock.toString(),
-      };
-
-      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-      console.log(`✅ Successfully cached data with key: ${cacheKey}`);
-    } catch (error) {
-      console.error("❌ Error setting cache:", error);
-    }
-  };
-
-  const fetchInitialUserBids = async () => {
-    if (!address || !publicClient) return;
-
-    setLoading(true);
-    setError(null);
-    setLoadStats({
-      totalEvents: 0,
-      userEvents: 0,
-      processedBlocks: 0,
-    });
-
-    console.log(`🔍 Starting to fetch bids for user: ${address}`);
-    console.log(`📋 SCANNING STRATEGY:`);
-    console.log(`   1️⃣ First: Scan latest 2.5M blocks (≈7 days)`);
-    console.log(`   2️⃣ If no bids found: Auto-scan ALL remaining older blocks`);
-    console.log(`   3️⃣ Always deduplicate results by transaction hash`);
-
-    try {
-      // Get the latest block number
-      const latestBlock = await publicClient.getBlockNumber();
-      console.log(`📊 Latest block number: ${latestBlock}`);
-
-      // Start by fetching most recent 2.5 million blocks (approx 7 days)
-      const fromBlock = latestBlock - BigInt(INITIAL_BLOCKS_RANGE);
-      const startBlock = fromBlock > BigInt(0) ? fromBlock : BigInt(0);
-
-      console.log(
-        `🎯 Initial scan range: ${startBlock} to ${latestBlock} (${INITIAL_BLOCKS_RANGE.toLocaleString()} blocks - approx 7 days)`
+      setLoading(true);
+      setError(null);
+      const response = await fetch(
+        `/api/profile/contracts?walletAddress=${address}`
       );
+      const data = await response.json();
 
-      let fetchedBids = await fetchUserBidsInRange(startBlock, latestBlock);
-      console.log(
-        `✅ Initial scan completed. Found ${fetchedBids.length} user bids in recent blocks`
-      );
-
-      // If no bids found in recent blocks AND there are older blocks to scan, automatically scan all older blocks
-      if (fetchedBids.length === 0 && startBlock > BigInt(0)) {
-        console.log(
-          `⚠️ No bids found in recent ${INITIAL_BLOCKS_RANGE.toLocaleString()} blocks. Starting comprehensive scan from block 0...`
-        );
-        console.log(
-          `🔍 Comprehensive scan range: 0 to ${startBlock - BigInt(1)
-          } (${startBlock} blocks)`
-        );
-
-        // Scan from block 0 to the start of our previous range
-        const olderBids = await fetchUserBidsInRange(
-          BigInt(0),
-          startBlock - BigInt(1)
-        );
-        console.log(
-          `✅ Comprehensive scan completed. Found ${olderBids.length} user bids in older blocks`
-        );
-
-        // Merge and deduplicate bids (using transaction hash as unique identifier)
-        const allBids = [...fetchedBids, ...olderBids];
-        fetchedBids = deduplicateBids(allBids);
-
-        console.log(
-          `🔧 After deduplication: ${fetchedBids.length} unique bids`
-        );
-
-        // Since we scanned everything from block 0, there's no more data to load
-        setEarliestFetchedBlock(BigInt(0));
-        setHasMoreData(false); // No more data - we've scanned everything from genesis block
-        console.log(`🏁 Comprehensive scan complete - no more blocks to scan`);
-
-        // Mark that we did a comprehensive scan for caching
-        var didComprehensiveScan = true;
-        var actualEarliestBlock = BigInt(0);
-      } else if (fetchedBids.length > 0) {
-        // Found bids in recent blocks - deduplicate and set up for potential "Load more"
-        fetchedBids = deduplicateBids(fetchedBids);
-        setEarliestFetchedBlock(startBlock);
-        setHasMoreData(startBlock > BigInt(0)); // Show "Load more" only if there are older blocks
-        console.log(
-          `✅ Found bids in recent blocks. Can load ${startBlock > BigInt(0) ? "older blocks" : "no more blocks"
-          }`
-        );
-
-        // Mark that we did a partial scan for caching
-        var didComprehensiveScan = false;
-        var actualEarliestBlock = startBlock;
+      if (data.success) {
+        setContracts(data.contracts);
+        setBalanceDeposits(data.balanceDeposits || []);
+        calculateStats(data.contracts);
       } else {
-        // Edge case: no older blocks to scan and no bids found
-        fetchedBids = deduplicateBids(fetchedBids);
-        setEarliestFetchedBlock(startBlock);
-        setHasMoreData(false);
-        console.log(`ℹ️ No bids found and no older blocks to scan`);
-
-        // Mark for caching
-        var didComprehensiveScan = false;
-        var actualEarliestBlock = startBlock;
-      }
-
-      console.log(`🎉 Total unique bids found: ${fetchedBids.length}`);
-
-      // Sort by timestamp (newest first)
-      fetchedBids.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-
-      // Update state with results
-      setUserBids(fetchedBids);
-      setLatestFetchedBlock(latestBlock);
-
-      // Cache the results with correct earliest block
-      setCachedData(fetchedBids, latestBlock, actualEarliestBlock);
-
-      console.log(`💾 Data cached for user: ${address}`);
-
-      // Show success toast
-      if (fetchedBids.length > 0) {
-        toast.success(
-          `Successfully found ${fetchedBids.length} bid${fetchedBids.length > 1 ? "s" : ""
-          }!`
-        );
-      } else {
-        toast.success("Scan completed - no bids found");
-      }
-
-      // Log the scanning result summary
-      if (didComprehensiveScan) {
-        console.log(
-          `🏁 COMPLETE: Scanned all blocks (0 to ${latestBlock}) - found ${fetchedBids.length} bids`
-        );
-      } else if (fetchedBids.length > 0 && startBlock > BigInt(0)) {
-        console.log(
-          `📋 PARTIAL: Scanned recent blocks (${startBlock} to ${latestBlock}) - found ${fetchedBids.length} bids. Load more available.`
-        );
-      } else {
-        console.log(
-          `📋 COMPLETE: Scanned available blocks - found ${fetchedBids.length} bids`
-        );
+        setError(data.error || "Failed to fetch contracts");
       }
     } catch (err) {
-      console.error("❌ Error fetching user bids:", err);
-      setError("Failed to fetch user bids. Please try again.");
+      setError("Network error occurred");
+      console.error("Error fetching contracts:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Helper function to deduplicate bids based on transaction hash
-  const deduplicateBids = (bids: BidEvent[]): BidEvent[] => {
-    const seen = new Set<string>();
-    const uniqueBids: BidEvent[] = [];
+  const calculateStats = (contractsData: Contract[]) => {
+    const now = new Date();
+    const activeContracts = contractsData.filter(
+      (contract) => new Date(contract.evictionThresholdDate) > now
+    ).length;
 
-    for (const bid of bids) {
-      if (!seen.has(bid.transactionHash)) {
-        seen.add(bid.transactionHash);
-        uniqueBids.push(bid);
-        console.log(
-          `✓ Added unique bid: ${bid.transactionHash.slice(0, 10)}...`
-        );
-      } else {
-        console.log(
-          `⚠️ Skipped duplicate bid: ${bid.transactionHash.slice(0, 10)}...`
-        );
-      }
-    }
-
-    return uniqueBids;
-  };
-
-  const fetchMoreUserBids = async () => {
-    if (
-      !address ||
-      !publicClient ||
-      !earliestFetchedBlock ||
-      earliestFetchedBlock <= BigInt(0) ||
-      loadingMore
-    )
-      return;
-
-    console.log(
-      `📚 Loading more bids. Current earliest block: ${earliestFetchedBlock}`
+    const totalGasSaved = contractsData.reduce(
+      (sum, contract) => sum + parseInt(contract.gasSaved || "0"),
+      0
     );
 
-    setLoadingMore(true);
-    setError(null);
-
-    try {
-      // For the older data, go from block 0 to the earliest block we've already fetched
-      const fromBlock = BigInt(0);
-      const toBlock = earliestFetchedBlock - BigInt(1);
-
-      console.log(`🔍 Fetching remaining blocks: ${fromBlock} to ${toBlock}`);
-
-      // Check if there are more blocks to fetch
-      if (fromBlock >= toBlock) {
-        console.log(`ℹ️ No more blocks to fetch`);
-        setHasMoreData(false);
-        setLoadingMore(false);
-        return;
-      }
-
-      // Fetch older bids
-      const olderBids = await fetchUserBidsInRange(fromBlock, toBlock);
-      console.log(
-        `📊 Found ${olderBids.length} additional bids in remaining blocks`
-      );
-
-      // Merge and deduplicate all bids
-      const allBids = [...userBids, ...olderBids];
-      const uniqueBids = deduplicateBids(allBids);
-
-      console.log(
-        `🔧 After deduplication: ${uniqueBids.length} total unique bids`
-      );
-
-      // Sort by timestamp (newest first)
-      uniqueBids.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-
-      console.log(`🎉 Total bids now: ${uniqueBids.length}`);
-
-      setUserBids(uniqueBids);
-      setEarliestFetchedBlock(fromBlock);
-      setHasMoreData(false); // No more data after fetching the oldest blocks
-
-      // Update cache with all bids
-      setCachedData(uniqueBids, latestFetchedBlock || BigInt(0), fromBlock);
-
-      // Show success toast
-      toast.success(
-        `Successfully loaded all historical data! Found ${uniqueBids.length
-        } total bid${uniqueBids.length > 1 ? "s" : ""}!`
-      );
-    } catch (err) {
-      console.error("❌ Error fetching more user bids:", err);
-      setError("Failed to fetch more bids. Please try again.");
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
-  const fetchUserBidsInRange = async (
-    fromBlock: bigint,
-    toBlock: bigint
-  ): Promise<BidEvent[]> => {
-    if (!address || !publicClient) return [];
-
-    console.log(
-      `🔎 Fetching bids in range: ${fromBlock} to ${toBlock} (${toBlock - fromBlock + BigInt(1)
-      } blocks)`
+    const totalGasUsed = contractsData.reduce(
+      (sum, contract) => sum + parseInt(contract.gasUsed || "0"),
+      0
     );
 
-    const userBidLogs: BidEvent[] = [];
-    let stats = {
-      totalEvents: 0,
-      userEvents: 0,
-      processedBlocks: 1,
-    };
-
-    try {
-      // First get all InsertBid events in this range
-      console.log(
-        `📡 Querying InsertBid events from contract: ${config.contracts.cacheManager.address}`
-      );
-
-      const logs = await publicClient.getLogs({
-        address: config.contracts.cacheManager.address as `0x${string}`,
-        event: parseAbiItem(
-          "event InsertBid(bytes32 indexed codehash, address program, uint192 bid, uint64 size)"
-        ),
-        fromBlock,
-        toBlock,
-      });
-
-      stats.totalEvents = logs.length;
-      console.log(
-        `📊 Found ${logs.length} total InsertBid events in this range`
-      );
-
-      // No logs found, return empty array
-      if (logs.length === 0) {
-        console.log(
-          `ℹ️ No InsertBid events found in blocks ${fromBlock} to ${toBlock}`
-        );
-        return [];
-      }
-
-      console.log(
-        `🔍 Processing events in batches of ${BATCH_SIZE}. Connected wallet: ${address}`
-      );
-
-      // Process events in larger batches for better performance
-      for (let i = 0; i < logs.length; i += BATCH_SIZE) {
-        const batch = logs.slice(i, i + BATCH_SIZE);
-        console.log(
-          `⚙️ Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(
-            logs.length / BATCH_SIZE
-          )} (${batch.length} events)`
-        );
-
-        // Use Promise.all to fetch transactions in parallel
-        const transactions = await Promise.all(
-          batch.map((log) =>
-            publicClient.getTransaction({ hash: log.transactionHash })
-          )
-        );
-
-        console.log(
-          `📥 Fetched ${transactions.length} transactions for current batch`
-        );
-
-        // Filter logs for transactions sent by the connected wallet
-        const userLogsIndices = transactions
-          .map((tx, idx) => {
-            const isUserTransaction =
-              tx.from.toLowerCase() === address.toLowerCase();
-            if (isUserTransaction) {
-              console.log(
-                `✅ Found user transaction: ${tx.hash} (from: ${tx.from})`
-              );
-            }
-            return isUserTransaction ? idx : -1;
-          })
-          .filter((idx) => idx !== -1);
-
-        stats.userEvents += userLogsIndices.length;
-        console.log(
-          `👤 Found ${userLogsIndices.length} user transactions in this batch`
-        );
-
-        if (userLogsIndices.length === 0) {
-          console.log(
-            `⏭️ No user transactions in this batch, skipping to next`
-          );
-          continue;
-        }
-
-        // Get only logs that belong to the user
-        const userLogs = userLogsIndices.map((idx) => batch[idx]);
-
-        // Get unique block numbers to fetch timestamps
-        const uniqueBlockNumbers = [
-          ...new Set(userLogs.map((log) => log.blockNumber)),
-        ];
-        console.log(
-          `🕒 Fetching timestamps for ${uniqueBlockNumbers.length} unique blocks`
-        );
-
-        // Create block number to timestamp mapping
-        const blockTimestamps = new Map<string, number>();
-
-        // Fetch block timestamps in parallel
-        const blocks = await Promise.all(
-          uniqueBlockNumbers.map((blockNum) =>
-            publicClient.getBlock({ blockNumber: blockNum })
-          )
-        );
-
-        // Map block numbers to timestamps
-        blocks.forEach((block) => {
-          blockTimestamps.set(block.number.toString(), Number(block.timestamp));
-        });
-
-        // Process user logs with timestamp information
-        for (const log of userLogs) {
-          const bidEvent = {
-            blockNumber: log.blockNumber,
-            transactionHash: log.transactionHash,
-            args: {
-              codehash: log.args.codehash as string,
-              program: log.args.program as string,
-              bid: log.args.bid as bigint,
-              size: log.args.size as bigint,
-            },
-            timestamp: blockTimestamps.get(log.blockNumber.toString()),
-          };
-
-          userBidLogs.push(bidEvent);
-          console.log(
-            `💰 Added user bid: ${formatEther(
-              bidEvent.args.bid
-            )} ETH for program ${formatAddress(
-              bidEvent.args.program
-            )} (tx: ${bidEvent.transactionHash.slice(0, 10)}...)`
-          );
-        }
-
-        // Update stats for UI
-        stats.processedBlocks = uniqueBlockNumbers.length;
-        setLoadStats((prevStats) => ({
-          totalEvents: prevStats.totalEvents + stats.totalEvents,
-          userEvents: prevStats.userEvents + stats.userEvents,
-          processedBlocks: prevStats.processedBlocks + stats.processedBlocks,
-        }));
-      }
-
-      console.log(`🏁 Completed processing range ${fromBlock} to ${toBlock}`);
-      console.log(
-        `📈 Statistics: ${stats.totalEvents} total events, ${stats.userEvents} user events, ${stats.processedBlocks} blocks processed`
-      );
-
-      // Sort by timestamp (newest first)
-      userBidLogs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-
-      return userBidLogs;
-    } catch (error) {
-      console.error(
-        `❌ Error fetching bids in range ${fromBlock} to ${toBlock}:`,
-        error
-      );
-      throw error;
-    }
+    setStats({
+      totalContracts: contractsData.length,
+      totalGasSaved: totalGasSaved.toLocaleString(),
+      totalGasUsed: totalGasUsed.toLocaleString(),
+      activeContracts,
+    });
   };
 
-  const formatTimestamp = (timestamp?: number) => {
-    if (!timestamp) return "Unknown";
-    return new Date(timestamp * 1000).toLocaleString();
+  // Robust ISO parser that tolerates a space before 'T' and always constructs a UTC date
+  const parseISOToUTCTimestamp = (raw: string | undefined | null): number => {
+    if (!raw || typeof raw !== "string") return 0;
+    const s = raw.trim().replace(/\sT/i, "T");
+
+    // Match: YYYY-MM-DD[T ]HH:mm[:ss][.SSS][Z]
+    const m = s.match(
+      /^(\d{4})-(\d{2})-(\d{2})[T\s]?(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(?:Z)?$/i
+    );
+    if (!m) {
+      const t = Date.parse(s);
+      return isNaN(t) ? 0 : t;
+    }
+    const [_, yyyy, mm, dd, HH, MM, SS = "0", MS = "0"] = m;
+    const ts = Date.UTC(
+      Number(yyyy),
+      Number(mm) - 1,
+      Number(dd),
+      Number(HH),
+      Number(MM),
+      Number(SS),
+      Number(MS.padEnd(3, "0"))
+    );
+    return ts;
+  };
+
+  const getBidChargesForNetwork = (network: string) => {
+    const deposit = balanceDeposits.find(deposit => deposit.network === network);
+    return deposit?.bidCharges || "0";
+  };
+
+  const getTotalBidCharges = () => {
+    return balanceDeposits.reduce((total, deposit) => {
+      return total + parseFloat(deposit.bidCharges || "0");
+    }, 0);
+  };
+
+  const formatDate = (dateString: string) => {
+    const ts = parseISOToUTCTimestamp(dateString);
+    if (!ts) return "-";
+    const d = new Date(ts);
+    // Render in user's local timezone
+    return d.toLocaleString("en-US", {
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
   const formatAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  const getUniqueContracts = () => {
-    const uniqueContracts = new Set(userBids.map((bid) => bid.args.program));
-    return uniqueContracts.size;
+  const getStatusBadge = (evictionDate: string) => {
+    const now = new Date();
+    const threshold = new Date(evictionDate);
+    const isActive = threshold > now;
+
+    return (
+      <span
+        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+          isActive
+            ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
+            : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
+        }`}
+      >
+        {isActive ? "Active" : "Expired"}
+      </span>
+    );
   };
 
-  const getTotalBidAmount = () => {
-    return userBids.reduce((total, bid) => total + bid.args.bid, BigInt(0));
+  const getNetworkBadge = (network: string) => {
+    const networkColors: { [key: string]: string } = {
+      "arbitrum-one":
+        "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+      "arbitrum-sepolia":
+        "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-300",
+    };
+
+    return (
+      <span
+        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+          networkColors[network] ||
+          "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300"
+        }`}
+      >
+        {network.replace("-", " ").toUpperCase()}
+      </span>
+    );
   };
 
-  // Calculate bid savings compared to minimum bid
-  const calculateBidSavings = (bidValue: bigint) => {
-    if (!minBidFromEntries) {
-      return "N/A";
-    }
-
-    const savings = bidValue - minBidFromEntries;
-
-    if (savings === BigInt(0)) {
-      return "0 (Minimum)";
-    } else if (savings > BigInt(0)) {
-      return `+${savings.toString()}`;
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
     } else {
-      return savings.toString();
+      setSortField(field);
+      setSortDirection("asc");
     }
   };
 
-  const clearCache = () => {
-    if (!address) return;
-    console.log(
-      `🗑️ Clearing cache and refreshing data for address: ${address}`
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return (
+        <svg
+          className="w-4 h-4 text-slate-400"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+          />
+        </svg>
+      );
+    }
+
+    return sortDirection === "asc" ? (
+      <svg
+        className="w-4 h-4 text-blue-500"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M5 15l7-7 7 7"
+        />
+      </svg>
+    ) : (
+      <svg
+        className="w-4 h-4 text-blue-500"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M19 9l-7 7-7-7"
+        />
+      </svg>
     );
-
-    // Clear cache
-    localStorage.removeItem(CACHE_KEY_BIDS + address.toLowerCase());
-
-    // Reset state
-    setUserBids([]);
-    setHasMoreData(true);
-    setEarliestFetchedBlock(null);
-    setLatestFetchedBlock(null);
-    setAllEntries([]);
-    setMinBidFromEntries(null);
-
-    console.log(
-      `🔄 Starting fresh scan - will check latest 2.5M blocks first, then older blocks if needed`
-    );
-
-    // Fetch all entries first, then user bids
-    fetchAllEntries();
-    fetchInitialUserBids();
   };
 
-  if (!isConnected) {
+  const getExplorerUrl = (network: string, txHash: string) => {
+    const baseUrls: { [key: string]: string } = {
+      "arbitrum-one": "https://arbiscan.io/tx/",
+      "arbitrum-sepolia": "https://sepolia.arbiscan.io/tx/",
+    };
+
+    return `${baseUrls[network] || "https://arbiscan.io/tx/"}${txHash}`;
+  };
+
+  const copyToClipboard = async (text: string, type: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setToast({ message: `${type} copied to clipboard!`, type: "success" });
+    } catch (err) {
+      setToast({ message: `Failed to copy ${type}`, type: "error" });
+    }
+  };
+
+  const showToast = (message: string, type: "success" | "error") => {
+    setToast({ message, type });
+  };
+
+  // Show wallet connection prompt if not connected
+  if (!isConnected && !isConnecting) {
     return (
       <div className="min-h-screen bg-zinc-900 flex items-center justify-center">
-        <div className="bg-zinc-800/80 backdrop-blur-sm rounded-2xl shadow-2xl border border-zinc-700/60 p-12 w-full max-w-md text-center">
-          <div className="mb-6">
-            <Wallet className="w-20 h-20 mx-auto text-zinc-400" />
+        <div className="container mx-auto px-4">
+          <div className="max-w-md mx-auto text-center">
+            <div className="bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-8">
+              <div className="text-slate-400 mb-6">
+                <svg
+                  className="w-16 h-16 mx-auto mb-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
+                  />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-4">
+                Connect Your Wallet
+              </h2>
+              <p className="text-slate-400 mb-6">
+                Please connect your wallet to view your smart cache contracts
+                and profile data.
+              </p>
+              <div className="text-sm text-slate-500">
+                Use the wallet connection button in the navigation to get
+                started.
+              </div>
+            </div>
           </div>
-          <h2 className="text-2xl font-bold text-zinc-100 mb-4">Connect Your Wallet</h2>
-          <p className="text-zinc-400 leading-relaxed">
-            Please connect your wallet to view your personalized bidding dashboard and track your transactions.
-          </p>
-          <div className="mt-8 flex justify-center">
-            <ConnectWallet />
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading state while connecting or fetching data
+  if (isConnecting || loading) {
+    return (
+      <div className="min-h-screen bg-zinc-900 text-white">
+        <div className="container mx-auto px-4 py-8">
+          {/* Header Skeleton */}
+          <div className="mb-8">
+            <div className="h-10 bg-zinc-800/50 rounded w-1/3 mb-2 animate-pulse"></div>
+            <div className="h-4 bg-zinc-800/50 rounded w-1/2 mb-4 animate-pulse"></div>
+            <div className="flex items-center space-x-2">
+              <div className="h-4 bg-zinc-800/50 rounded w-20 animate-pulse"></div>
+              <div className="h-6 bg-zinc-800/50 rounded w-32 animate-pulse"></div>
+            </div>
           </div>
-          <div className="mt-8 p-4 bg-blue-500/10 rounded-xl border border-blue-500/30">
-            <p className="text-sm text-blue-300">
-              Your dashboard will show real-time bid history, analytics, and savings data.
-            </p>
+
+          {/* Stats Cards Skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {[...Array(4)].map((_, i) => (
+              <div
+                key={i}
+                className="bg-zinc-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="h-4 bg-zinc-700/50 rounded w-3/4 mb-2 animate-pulse"></div>
+                    <div className="h-8 bg-zinc-700/50 rounded w-1/2 animate-pulse"></div>
+                  </div>
+                  <div className="p-3 bg-zinc-700/50 rounded-lg">
+                    <div className="w-6 h-6 bg-zinc-600/50 rounded animate-pulse"></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Table Skeleton */}
+          <div className="bg-zinc-800/30 backdrop-blur-sm border border-gray-700 rounded-xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-700">
+              <div className="h-6 bg-zinc-700/50 rounded w-1/4 mb-2 animate-pulse"></div>
+              <div className="h-4 bg-zinc-700/50 rounded w-1/3 animate-pulse"></div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-zinc-800/50 border-b border-gray-700">
+                    {[
+                      "Contract",
+                      "Network",
+                      "Status",
+                      "Gas Metrics",
+                      "Deployed",
+                      "Expires",
+                      "Actions",
+                    ].map((header, i) => (
+                      <th key={i} className="px-6 py-3 text-left">
+                        <div className="h-4 bg-zinc-600/50 rounded w-20 animate-pulse"></div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700/50">
+                  {[...Array(5)].map((_, i) => (
+                    <tr key={i} className="border-b border-gray-700/50">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center space-x-2">
+                          <div>
+                            <div className="h-4 bg-zinc-700/50 rounded w-24 mb-1 animate-pulse"></div>
+                            <div className="h-3 bg-zinc-700/50 rounded w-20 animate-pulse"></div>
+                          </div>
+                          <div className="h-4 w-4 bg-zinc-700/50 rounded animate-pulse"></div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="h-6 bg-zinc-700/50 rounded w-20 animate-pulse"></div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="h-6 bg-zinc-700/50 rounded w-16 animate-pulse"></div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center space-x-2">
+                          <div className="h-4 bg-zinc-700/50 rounded w-12 animate-pulse"></div>
+                          <div className="h-4 bg-zinc-700/50 rounded w-1 animate-pulse"></div>
+                          <div className="h-4 bg-zinc-700/50 rounded w-12 animate-pulse"></div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="h-4 bg-zinc-700/50 rounded w-20 animate-pulse"></div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="h-4 bg-zinc-700/50 rounded w-20 animate-pulse"></div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center space-x-3">
+                          <div className="h-4 w-4 bg-zinc-700/50 rounded animate-pulse"></div>
+                          <div className="h-4 w-4 bg-zinc-700/50 rounded animate-pulse"></div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -831,301 +480,509 @@ const UserDashboard = () => {
   }
 
   return (
-    <>
-      <div className="min-h-screen bg-zinc-900">
-        {/* Header Section */}
-        <div className="bg-zinc-900/60 border-b border-zinc-800/60">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8 py-6">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div className="space-y-1">
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-zinc-100 to-zinc-300 bg-clip-text text-transparent">
-                  My Bidding Dashboard
-                </h1>
-                <p className="text-zinc-400">
-                  Track your bids and contracts on the Cache Manager
+    <div className="min-h-screen bg-zinc-900">
+      <div className="container mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-2">
+            Profile Dashboard
+          </h1>
+          <p className="text-slate-600 dark:text-slate-400">
+            Manage and monitor your smart cache contracts
+          </p>
+          {isConnected && address && (
+            <div className="mt-4 flex items-center space-x-2">
+              <span className="text-sm text-slate-500 dark:text-slate-400">
+                Connected:
+              </span>
+              <code className="bg-slate-200 px-2 py-1 rounded text-sm font-mono">
+                {formatAddress(address)}
+              </code>
+            </div>
+          )}
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-zinc-800/50 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                  Total Contracts
+                </p>
+                <p className="text-3xl font-bold text-slate-900 dark:text-white">
+                  {stats.totalContracts}
                 </p>
               </div>
+              <div className="p-3 bg-blue-100 dark:bg-blue-900 rounded-lg">
+                <svg
+                  className="w-6 h-6 text-blue-600 dark:text-blue-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-zinc-800/50 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                  Active Contracts
+                </p>
+                <p className="text-3xl font-bold text-green-600 dark:text-green-400">
+                  {stats.activeContracts}
+                </p>
+              </div>
+              <div className="p-3 bg-green-100 dark:bg-green-900 rounded-lg">
+                <svg
+                  className="w-6 h-6 text-green-600 dark:text-green-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-zinc-800/50 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                  Total Gas Saved
+                </p>
+                <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+                  {stats.totalGasSaved}
+                </p>
+              </div>
+              <div className="p-3 bg-purple-100 dark:bg-purple-900 rounded-lg">
+                <svg
+                  className="w-6 h-6 text-purple-600 dark:text-purple-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                  />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-zinc-800/50 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                  Total Gas Used
+                </p>
+                <p className="text-3xl font-bold text-orange-600 dark:text-orange-400">
+                  {stats.totalGasUsed}
+                </p>
+              </div>
+              <div className="p-3 bg-orange-100 dark:bg-orange-900 rounded-lg">
+                <svg
+                  className="w-6 h-6 text-orange-600 dark:text-orange-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"
+                  />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bid Charges Display */}
+        {balanceDeposits.length > 0 && (
+          <div className="mb-8">
+            <div className="bg-zinc-800/50 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
+                Bid Charges by Network
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {balanceDeposits.map((deposit) => (
+                  <div key={deposit._id} className="flex items-center justify-between p-4 bg-zinc-700/30 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-slate-400 dark:text-slate-300">
+                        {deposit.network.replace("-", " ").toUpperCase()}
+                      </p>
+                      <p className="text-lg font-bold text-slate-900 dark:text-white">
+                        {deposit.bidCharges || "0"} ETH
+                      </p>
+                    </div>
+                    <div className="p-2 bg-yellow-100 dark:bg-yellow-900 rounded-lg">
+                      <svg
+                        className="w-5 h-5 text-yellow-600 dark:text-yellow-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 pt-4 border-t border-slate-600/30">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-slate-400 dark:text-slate-300">
+                    Total Bid Charges:
+                  </span>
+                  <span className="text-xl font-bold text-yellow-600 dark:text-yellow-400">
+                    {getTotalBidCharges()} ETH
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Contracts Table */}
+        <div className="bg-zinc-800/50 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
+              Your Contracts
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+              {contracts.length} contract{contracts.length !== 1 ? "s" : ""}{" "}
+              found
+            </p>
+          </div>
+
+          {error ? (
+            <div className="p-6 text-center">
+              <div className="text-red-600 dark:text-red-400 mb-2">
+                <svg
+                  className="w-12 h-12 mx-auto mb-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </div>
+              <p className="text-slate-600 dark:text-slate-400">{error}</p>
               <button
-                onClick={clearCache}
-                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-xl hover:from-blue-700 hover:to-blue-600 transition-all shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-blue-200 flex items-center gap-2"
+                onClick={fetchUserContracts}
+                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
-                <Database className="w-4 h-4" />
-                Refresh Data
+                Retry
               </button>
             </div>
-          </div>
-        </div>
-
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8 space-y-8">
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="group relative bg-zinc-800/50 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-zinc-700/60 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10 hover:-translate-y-1">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-blue-600/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-              <div className="relative">
-                <div className="flex items-start justify-between mb-6">
-                  <div className="p-4 bg-blue-500/10 rounded-xl group-hover:bg-blue-500/20 transition-colors duration-300 border border-blue-500/20">
-                    <Database className="w-8 h-8 text-blue-400" />
-                  </div>
-                  <div className="flex items-center gap-1 px-3 py-1 bg-blue-500/10 rounded-full border border-blue-500/20">
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                    <span className="text-xs font-medium text-blue-300">Active</span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-zinc-400">Total Contracts</p>
-                  <h3 className="text-3xl font-bold text-zinc-100">
-                    {getUniqueContracts()}
-                  </h3>
-                  <p className="text-sm text-zinc-500">Contracts you've bid on</p>
-                </div>
+          ) : contracts.length === 0 ? (
+            <div className="p-12 text-center">
+              <div className="text-slate-400 dark:text-slate-500 mb-4">
+                <svg
+                  className="w-16 h-16 mx-auto mb-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
               </div>
+              <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">
+                No contracts found
+              </h3>
+              <p className="text-slate-600 dark:text-slate-400">
+                You haven't deployed any smart cache contracts yet.
+              </p>
             </div>
-
-            <div className="group relative bg-zinc-800/50 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-zinc-700/60 transition-all duration-300 hover:shadow-xl hover:shadow-green-500/10 hover:-translate-y-1">
-              <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-green-600/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-              <div className="relative">
-                <div className="flex items-start justify-between mb-6">
-                  <div className="p-4 bg-green-500/10 rounded-xl group-hover:bg-green-500/20 transition-colors duration-300 border border-green-500/20">
-                    <TrendingUp className="w-8 h-8 text-green-400" />
-                  </div>
-                  <div className="flex items-center gap-1 px-3 py-1 bg-green-500/10 rounded-full border border-green-500/20">
-                    <CheckCircle className="w-3 h-3 text-green-400" />
-                    <span className="text-xs font-medium text-green-300">Tracked</span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-zinc-400">Total Bids</p>
-                  <h3 className="text-3xl font-bold text-zinc-100">{userBids.length}</h3>
-                  <p className="text-sm text-zinc-500">Bids successfully placed</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Bids Table */}
-          <div className="bg-zinc-800/50 backdrop-blur-sm rounded-2xl shadow-lg border border-zinc-700/60 transition-all duration-300 hover:shadow-xl">
-            <div className="p-8 border-b border-zinc-700/50">
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <h2 className="text-2xl font-bold text-zinc-100 flex items-center gap-3">
-                    <Clock className="w-6 h-6 text-blue-400" />
-                    Your Bid History
-                  </h2>
-                  <p className="text-sm text-zinc-400">Complete transaction history with analytics</p>
-                </div>
-                {userBids.length > 0 && (
-                  <div className="flex items-center gap-2 px-3 py-2 bg-zinc-700/50 border border-zinc-600/50 rounded-lg">
-                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                    <span className="text-zinc-300 text-sm font-medium">{userBids.length} transactions</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="p-8">
-              {loading ? (
-                <div className="text-center py-12">
-                  <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-500/10 rounded-full mb-4">
-                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-400 border-t-transparent"></div>
-                  </div>
-                  <h3 className="text-lg font-semibold text-zinc-100 mb-2">
-                    {loadStats.userEvents === 0
-                      ? "Scanning recent blocks for your bids..."
-                      : loadStats.userEvents > 0
-                        ? `Found ${loadStats.userEvents} bids! Loading details...`
-                        : "Performing comprehensive blockchain scan..."}
-                  </h3>
-                  <p className="text-sm text-zinc-400">
-                    {userBids.length === 0 && loadStats.totalEvents > 0
-                      ? "If no recent bids found, automatically scanning all historical blocks..."
-                      : "This might take a while for comprehensive scanning"}
-                  </p>
-                </div>
-              ) : error ? (
-                <div className="text-center py-12">
-                  <div className="inline-flex items-center justify-center w-16 h-16 bg-red-500/10 rounded-full mb-4 border border-red-500/20">
-                    <Database className="w-8 h-8 text-red-400" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-zinc-100 mb-2">Error Loading Data</h3>
-                  <p className="text-red-400 mb-4">{error}</p>
-                  <button
-                    onClick={fetchInitialUserBids}
-                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-xl hover:from-blue-700 hover:to-blue-600 transition-all shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
-                  >
-                    Retry
-                  </button>
-                </div>
-              ) : userBids.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="inline-flex items-center justify-center w-16 h-16 bg-zinc-700/50 rounded-full mb-4 border border-zinc-600/50">
-                    <Database className="w-8 h-8 text-zinc-400" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-zinc-100 mb-2">No Bids Found</h3>
-                  <p className="text-zinc-400 mb-4">
-                    You haven't placed any bids in the recent blocks or none were found.
-                  </p>
-                  <div className="p-4 bg-blue-500/10 rounded-xl border border-blue-500/30 inline-block">
-                    <p className="text-sm text-blue-300">
-                      Start by placing your first bid in the Cache Manager
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="overflow-hidden rounded-xl border border-zinc-700">
-                    <table className="w-full">
-                      <thead className="bg-zinc-700/30 border-b border-zinc-600/50">
-                        <tr>
-                          <th className="text-left py-4 px-6 font-semibold text-zinc-300 text-sm uppercase tracking-wider">
-                            Contract Address
-                          </th>
-                          <th className="text-left py-4 px-6 font-semibold text-zinc-300 text-sm uppercase tracking-wider">
-                            Bid Amount
-                          </th>
-                          <th className="text-left py-4 px-6 font-semibold text-zinc-300 text-sm uppercase tracking-wider">
-                            Bid Savings
-                          </th>
-                          <th className="text-left py-4 px-6 font-semibold text-zinc-300 text-sm uppercase tracking-wider">
-                            Size
-                          </th>
-                          <th className="text-left py-4 px-6 font-semibold text-zinc-300 text-sm uppercase tracking-wider">
-                            Timestamp
-                          </th>
-                          <th className="text-left py-4 px-6 font-semibold text-zinc-300 text-sm uppercase tracking-wider">
-                            Transaction
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-zinc-800/30 divide-y divide-zinc-700/50">
-                        {userBids.map((bid, index) => (
-                          <tr
-                            key={index}
-                            className={`transition-colors duration-200 ${index % 2 === 0 ? 'bg-zinc-800/20' : 'bg-zinc-700/20'} hover:bg-blue-500/10`}
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-zinc-800/30">
+                  <tr>
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
+                      onClick={() => handleSort("contractAddress")}
+                    >
+                      <div className="flex items-center space-x-1">
+                        <span>Contract</span>
+                        {getSortIcon("contractAddress")}
+                      </div>
+                    </th>
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
+                      onClick={() => handleSort("network")}
+                    >
+                      <div className="flex items-center space-x-1">
+                        <span>Network</span>
+                        {getSortIcon("network")}
+                      </div>
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
+                      onClick={() => handleSort("gasSaved")}
+                    >
+                      <div className="flex items-center space-x-1">
+                        <span>Gas Metrics</span>
+                        {getSortIcon("gasSaved")}
+                      </div>
+                    </th>
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
+                      onClick={() => handleSort("deployedAt")}
+                    >
+                      <div className="flex items-center space-x-1">
+                        <span>Deployed</span>
+                        {getSortIcon("deployedAt")}
+                      </div>
+                    </th>
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
+                      onClick={() => handleSort("evictionThresholdDate")}
+                    >
+                      <div className="flex items-center space-x-1">
+                        <span>Expires</span>
+                        {getSortIcon("evictionThresholdDate")}
+                      </div>
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {sortedContracts.map((contract) => (
+                    <tr
+                      key={contract._id}
+                      className="border-b border-gray-700/50 hover:bg-zinc-700/20 transition-colors duration-200"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-2">
+                          <div>
+                            <div className="text-sm font-medium text-slate-900 dark:text-white">
+                              {formatAddress(contract.contractAddress)}
+                            </div>
+                            <div className="text-sm text-slate-500 dark:text-slate-400">
+                              Min Bid: {contract.minBidRequired} ETH
+                            </div>
+                          </div>
+                          <button
+                            onClick={() =>
+                              copyToClipboard(
+                                contract.contractAddress,
+                                "Contract address"
+                              )
+                            }
+                            className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
+                            title="Copy contract address"
                           >
-                            <td className="py-4 px-6">
-                              <div className="flex items-center gap-3">
-                                <code className="text-sm bg-zinc-700/50 px-3 py-2 rounded-lg font-mono border border-zinc-600/50 text-zinc-300">
-                                  {formatAddress(bid.args.program)}
-                                </code>
-                                <button
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(
-                                      bid.args.program
-                                    );
-                                    toast.success(
-                                      "Contract address copied to clipboard!"
-                                    );
-                                  }}
-                                  className="text-blue-400 hover:text-blue-300 text-xs transition-colors px-2 py-1 rounded hover:bg-blue-500/10 border border-transparent hover:border-blue-500/30"
-                                >
-                                  Copy
-                                </button>
-                              </div>
-                            </td>
-                            <td className="py-4 px-6">
-                              <span className="inline-block bg-gradient-to-r from-blue-500/10 to-blue-600/10 text-blue-300 px-3 py-2 rounded-full text-sm font-semibold border border-blue-500/30">
-                                {bid.args.bid.toString()}
-                              </span>
-                            </td>
-                            <td className="py-4 px-6">
-                              <span
-                                className={`inline-block px-3 py-2 rounded-full text-sm font-semibold border ${!minBidFromEntries
-                                  ? "bg-zinc-600/30 text-zinc-300 border-zinc-500/30"
-                                  : bid.args.bid === minBidFromEntries
-                                    ? "bg-green-500/10 text-green-300 border-green-500/30"
-                                    : bid.args.bid > minBidFromEntries
-                                      ? "bg-yellow-500/10 text-yellow-300 border-yellow-500/30"
-                                      : "bg-blue-500/10 text-blue-300 border-blue-500/30"
-                                  }`}
-                              >
-                                {calculateBidSavings(bid.args.bid)}
-                              </span>
-                            </td>
-                            <td className="py-4 px-6 text-zinc-400 font-medium">
-                              {bid.args.size.toString()} bytes
-                            </td>
-                            <td className="py-4 px-6 text-sm text-zinc-400">
-                              {formatTimestamp(bid.timestamp)}
-                            </td>
-                            <td className="py-4 px-6">
-                              <a
-                                href={`https://sepolia.arbiscan.io/tx/${bid.transactionHash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 text-sm transition-colors px-2 py-1 rounded hover:bg-blue-500/10 border border-transparent hover:border-blue-500/30"
-                              >
-                                View on Arbiscan
-                                <ChevronRight className="w-3 h-3" />
-                              </a>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Load more button */}
-                  {hasMoreData && (
-                    <div className="flex justify-center mt-8">
-                      <button
-                        onClick={fetchMoreUserBids}
-                        disabled={loadingMore}
-                        className="px-6 py-3 bg-gradient-to-r from-zinc-700 to-zinc-600 text-white rounded-xl hover:from-zinc-600 hover:to-zinc-500 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-zinc-400 border border-zinc-600/50"
-                      >
-                        {loadingMore ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                            Loading older blocks (0 -{" "}
-                            {earliestFetchedBlock?.toString()})...
-                          </>
-                        ) : (
-                          <>
-                            <ChevronLeft className="h-4 w-4" />
-                            Load earliest blocks
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {getNetworkBadge(contract.network)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {getStatusBadge(contract.evictionThresholdDate)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-slate-900 dark:text-white">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-green-600 dark:text-green-400">
+                              + {parseInt(contract.gasSaved).toLocaleString()}
+                            </span>
+                            <span className="text-slate-400">|</span>
+                            <span className="text-orange-600 dark:text-orange-400">
+                              - {parseInt(contract.gasUsed).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
+                        {formatDate(contract.deployedAt)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
+                        {formatDate(contract.evictionThresholdDate)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex items-center space-x-3">
+                          <button
+                            onClick={() =>
+                              window.open(
+                                getExplorerUrl(
+                                  contract.network,
+                                  contract.txHash
+                                ),
+                                "_blank"
+                              )
+                            }
+                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 transition-colors p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                            title="View transaction on explorer"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                              />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() =>
+                              copyToClipboard(
+                                getExplorerUrl(
+                                  contract.network,
+                                  contract.txHash
+                                ),
+                                "Transaction URL"
+                              )
+                            }
+                            className="text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300 transition-colors p-1 rounded hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                            title="Copy transaction URL"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
+          )}
         </div>
 
-        <Toaster
-          position="top-center"
-          toastOptions={{
-            duration: 4000,
-            style: {
-              background: "#27272a",
-              color: "#fff",
-              border: '1px solid #3f3f46',
-            },
-            success: {
-              duration: 3000,
-              style: {
-                background: "#166534",
-                border: '1px solid #15803d',
-              },
-            },
-            error: {
-              duration: 5000,
-              style: {
-                background: "#991b1b",
-                border: '1px solid #dc2626',
-              },
-            },
-            loading: {
-              style: {
-                background: "#1e40af",
-                border: '1px solid #2563eb',
-              },
-            },
-          }}
-        />
+        {/* Toast Notification */}
+        {toast && (
+          <div className="fixed top-4 right-4 z-50">
+            <div
+              className={`px-6 py-3 rounded-lg shadow-lg border ${
+                toast.type === "success"
+                  ? "bg-green-50 border-green-200 text-green-800 dark:bg-green-900 dark:border-green-700 dark:text-green-200"
+                  : "bg-red-50 border-red-200 text-red-800 dark:bg-red-900 dark:border-red-700 dark:text-red-200"
+              } animate-in slide-in-from-bottom-2 duration-300`}
+            >
+              <div className="flex items-center space-x-2">
+                {toast.type === "success" ? (
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                ) : (
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                )}
+                <span className="font-medium">{toast.message}</span>
+                <button
+                  onClick={() => setToast(null)}
+                  className="ml-2 text-current hover:opacity-70 transition-opacity"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-    </>
+    </div>
   );
-};
-
-export default UserDashboard;
+}

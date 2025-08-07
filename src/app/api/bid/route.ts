@@ -11,6 +11,7 @@ export async function POST(req: NextRequest) {
       minBidRequired,
       gasSaved,
       gasUsed,
+      gasWhenNotCached,
       txHash
     } = body;
 
@@ -25,6 +26,7 @@ export async function POST(req: NextRequest) {
     // Get current date in IST
     const now = new Date();
     const istTime = new Date(now.getTime());
+    const evictionTime = new Date(istTime.getTime() + (364 * 24 * 60 * 60 * 1000) + (23 * 60 * 60 * 1000)); // 364 days + 23 hours
 
     const bidData = {
       contractAddress,
@@ -33,7 +35,9 @@ export async function POST(req: NextRequest) {
       minBidRequired: minBidRequired || "0.0",
       gasSaved: gasSaved || "0",
       gasUsed: gasUsed || "0",
-      bidPlacedAt: istTime.toISOString(),
+      gasWhenNotCached: gasWhenNotCached || "0",
+      deployedAt: istTime.toISOString(),
+      evictionThresholdDate: evictionTime.toISOString(),
       usingUI: true,
       txHash
     };
