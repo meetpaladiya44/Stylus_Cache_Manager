@@ -7,6 +7,7 @@ interface CacheEntriesTableProps {
   filteredEntries: any[];
   paginatedEntries: any[];
   entriesPerPage: number;
+  setEntriesPerPage: React.Dispatch<React.SetStateAction<number>>;
   currentPage: number;
   pageCount: number;
   setCurrentPage: React.Dispatch<React.SetStateAction<number>>;
@@ -23,6 +24,7 @@ const CacheEntriesTable: React.FC<CacheEntriesTableProps> = ({
   filteredEntries,
   paginatedEntries,
   entriesPerPage,
+  setEntriesPerPage,
   currentPage,
   pageCount,
   setCurrentPage,
@@ -182,9 +184,10 @@ const CacheEntriesTable: React.FC<CacheEntriesTableProps> = ({
                     <button
                       key={number}
                       onClick={() => {
+                        console.log(`🔄 Changing entries per page to ${number}`);
                         setShowEntriesDropdown(false);
                         setCurrentPage(1);
-                        // setEntriesPerPage is expected to be handled in parent
+                        setEntriesPerPage(number);
                       }}
                       className={`w-full px-4 py-2 text-sm text-left transition-colors duration-200 ${entriesPerPage === number
                         ? 'bg-blue-500/20 text-blue-300 font-semibold border-l-2 border-blue-400'

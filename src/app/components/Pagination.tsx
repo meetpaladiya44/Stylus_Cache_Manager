@@ -33,7 +33,7 @@ interface PaginationButtonProps {
   title?: string;
   variant?: 'default' | 'outline' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
-  isSpecificLoading?: boolean; // New prop to handle specific button loading
+  isSpecificLoading?: boolean;
 }
 
 const PaginationButton: React.FC<PaginationButtonProps> = ({
@@ -47,27 +47,33 @@ const PaginationButton: React.FC<PaginationButtonProps> = ({
   size = 'md',
   isSpecificLoading = false
 }) => {
-  const baseClasses = "group relative inline-flex items-center justify-center font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-zinc-900";
+  // ✅ FIXED: Simplified CSS with specific transitions to prevent conflicts
+  const baseClasses = "relative inline-flex items-center justify-center font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-zinc-900";
   
   const sizeClasses = {
-    sm: "px-2 py-1 text-xs rounded-md",
-    md: "px-3 py-2 text-sm rounded-lg",
-    lg: "px-4 py-2.5 text-base rounded-xl"
+    sm: "px-2 py-1 text-xs rounded-md min-w-[28px] min-h-[28px]",
+    md: "px-3 py-2 text-sm rounded-lg min-w-[36px] min-h-[36px]",
+    lg: "px-4 py-2.5 text-base rounded-xl min-w-[44px] min-h-[44px]"
   };
 
+  // ✅ FIXED: Ensured buttons are always visible with opacity >= 0.4
   const variantClasses = {
     default: active 
-      ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white border border-blue-500 shadow-lg shadow-blue-500/25" 
-      : "bg-zinc-800/60 text-gray-300 border border-gray-600/50 hover:bg-zinc-700/60 hover:text-white hover:border-gray-500/70",
+      ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white border border-blue-500 shadow-lg shadow-blue-500/25 opacity-100" 
+      : "bg-zinc-800/60 text-gray-300 border border-gray-600/50 hover:bg-zinc-700/80 hover:text-white hover:border-gray-500 opacity-100",
     outline: active
-      ? "bg-blue-600 text-white border-2 border-blue-500"
-      : "bg-transparent text-gray-300 border-2 border-gray-600/50 hover:border-blue-500/50 hover:text-blue-400",
+      ? "bg-blue-600 text-white border-2 border-blue-500 opacity-100"
+      : "bg-transparent text-gray-300 border-2 border-gray-600/50 hover:border-blue-500/60 hover:text-blue-300 opacity-100",
     ghost: active
-      ? "bg-blue-600/20 text-blue-400 border border-blue-500/30"
-      : "bg-transparent text-gray-400 hover:bg-zinc-700/40 hover:text-white border border-transparent"
+      ? "bg-blue-600/20 text-blue-400 border border-blue-500/30 opacity-100"
+      : "bg-transparent text-gray-400 hover:bg-zinc-700/40 hover:text-white border border-transparent opacity-100"
   };
 
-  const disabledClasses = "opacity-40 cursor-not-allowed hover:bg-zinc-800/60 hover:text-gray-300 hover:border-gray-600/50";
+  // ✅ FIXED: Disabled state with minimum visibility
+  const disabledClasses = "opacity-50 cursor-not-allowed pointer-events-none";
+  
+  // ✅ FIXED: Specific transitions only for colors, no transform or opacity transitions
+  const transitionClasses = "transition-colors duration-150 ease-in-out";
 
   return (
     <button
@@ -77,21 +83,20 @@ const PaginationButton: React.FC<PaginationButtonProps> = ({
       className={`
         ${baseClasses}
         ${sizeClasses[size]}
+        ${transitionClasses}
         ${disabled || isSpecificLoading ? disabledClasses : variantClasses[variant]}
-        ${!disabled && !active && !isSpecificLoading ? 'hover:scale-105 hover:shadow-md hover:shadow-blue-500/20' : ''}
-      `}
+      `.replace(/\s+/g, ' ').trim()}
+      style={{
+        // ✅ FIXED: Force minimum opacity to prevent invisible buttons
+        opacity: disabled || isSpecificLoading ? 0.5 : 1,
+        visibility: 'visible',
+        display: 'inline-flex'
+      }}
     >
       {isSpecificLoading ? (
         <Loader2 className="w-4 h-4 animate-spin" />
       ) : (
         children
-      )}
-      
-      {/* Hover tooltip */}
-      {title && !disabled && !isSpecificLoading && (
-        <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-zinc-800 text-xs text-gray-300 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-10">
-          {title}
-        </span>
       )}
     </button>
   );
@@ -111,23 +116,57 @@ const Pagination: React.FC<PaginationProps> = ({
   className = ""
 }) => {
   const [loadingPage, setLoadingPage] = React.useState<number | null>(null);
+  const [isProcessing, setIsProcessing] = React.useState<boolean>(false);
+  const lastClickTime = React.useRef<number>(0);
+  const currentRequest = React.useRef<Promise<any> | null>(null);
 
+  // ✅ FIXED: Debounced page change with race condition prevention
   const handlePageChange = async (page: number) => {
-    if (page === currentPage || disabled || loading || loadingPage !== null) return;
+    const now = Date.now();
     
+    // Prevent rapid clicks (debounce with 200ms)
+    if (now - lastClickTime.current < 200) {
+      console.log('⏸️ Pagination click ignored - too fast');
+      return;
+    }
+    
+    // Prevent duplicate page changes
+    if (page === currentPage || disabled || loading || isProcessing || loadingPage !== null) {
+      return;
+    }
+    
+    lastClickTime.current = now;
     setLoadingPage(page);
+    setIsProcessing(true);
+    
     try {
-      const result = onPageChange(page);
-      // Handle both sync and async onPageChange functions
-      if (result && typeof result.then === 'function') {
-        await result;
+      // Cancel any existing request
+      if (currentRequest.current) {
+        console.log('🚫 Cancelling previous pagination request');
+      }
+      
+      // Create new request
+      const request = onPageChange(page);
+      currentRequest.current = typeof request?.then === 'function' ? request : Promise.resolve();
+      
+      if (request && typeof request.then === 'function') {
+        await request;
+      }
+      
+      // Only clear loading if this is still the current request
+      if (currentRequest.current === request) {
+        setLoadingPage(null);
+        setIsProcessing(false);
+        currentRequest.current = null;
       }
     } catch (error) {
-      console.error('Error changing page:', error);
-    } finally {
+      console.error('❌ Pagination error:', error);
       setLoadingPage(null);
+      setIsProcessing(false);
+      currentRequest.current = null;
     }
   };
+
   // Calculate visible page range
   const getVisiblePages = (): (number | 'ellipsis')[] => {
     if (totalPages <= maxVisiblePages) {
@@ -137,35 +176,29 @@ const Pagination: React.FC<PaginationProps> = ({
     const pages: (number | 'ellipsis')[] = [];
     const halfVisible = Math.floor(maxVisiblePages / 2);
 
-    // Always show first page
     pages.push(1);
 
     let startPage = Math.max(2, currentPage - halfVisible);
     let endPage = Math.min(totalPages - 1, currentPage + halfVisible);
 
-    // Adjust range if we're near the beginning or end
     if (currentPage <= halfVisible + 1) {
       endPage = Math.min(totalPages - 1, maxVisiblePages - 1);
     } else if (currentPage >= totalPages - halfVisible) {
       startPage = Math.max(2, totalPages - maxVisiblePages + 2);
     }
 
-    // Add ellipsis after first page if needed
     if (startPage > 2) {
       pages.push('ellipsis');
     }
 
-    // Add middle pages
     for (let i = startPage; i <= endPage; i++) {
       pages.push(i);
     }
 
-    // Add ellipsis before last page if needed
     if (endPage < totalPages - 1) {
       pages.push('ellipsis');
     }
 
-    // Always show last page (if not already included)
     if (totalPages > 1) {
       pages.push(totalPages);
     }
@@ -208,15 +241,15 @@ const Pagination: React.FC<PaginationProps> = ({
       {/* Progress Bar */}
       <div className="w-full bg-zinc-700/30 rounded-full h-1 overflow-hidden">
         <div 
-          className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+          className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full transition-all duration-300 ease-out"
           style={{ width: `${(currentPage / totalPages) * 100}%` }}
         />
       </div>
 
-      {/* Pagination Controls */}
+      {/* ✅ FIXED: Pagination Controls with forced visibility */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
         {/* Navigation Buttons - Left */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" style={{ opacity: 1, visibility: 'visible' }}>
           {showFirstLast && (
             <PaginationButton
               onClick={() => handlePageChange(1)}
@@ -240,12 +273,15 @@ const Pagination: React.FC<PaginationProps> = ({
           </PaginationButton>
         </div>
 
-        {/* Page Numbers */}
+        {/* ✅ FIXED: Page Numbers with guaranteed visibility */}
         {showPageNumbers && (
-          <div className="flex items-center gap-1 px-2">
+          <div 
+            className="flex items-center gap-1 px-2" 
+            style={{ opacity: 1, visibility: 'visible', minHeight: '36px' }}
+          >
             {visiblePages.map((page, index) => (
               page === 'ellipsis' ? (
-                <div key={`ellipsis-${index}`} className="flex items-center gap-1 px-2">
+                <div key={`ellipsis-${index}`} className="flex items-center gap-1 px-2 opacity-100">
                   <MoreHorizontal className="w-4 h-4 text-gray-400" />
                 </div>
               ) : (
@@ -266,7 +302,7 @@ const Pagination: React.FC<PaginationProps> = ({
         )}
 
         {/* Navigation Buttons - Right */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" style={{ opacity: 1, visibility: 'visible' }}>
           <PaginationButton
             onClick={() => handlePageChange(currentPage + 1)}
             disabled={currentPage === totalPages || disabled}

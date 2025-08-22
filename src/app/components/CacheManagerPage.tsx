@@ -1191,6 +1191,11 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
     return () => clearInterval(interval);
   }, [isConnected, isAuthInitialized, lastFetchedBlock, loadingGasAnalysis, isIncrementalUpdate]);
 
+  // Reset current page when entries per page changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [entriesPerPage]);
+
   const fetchCacheSize = async (showToast = true) => {
     try {
       setIsLoading(true);
@@ -1546,34 +1551,156 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       return;
     }
 
+    if (!isConnected) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+
     try {
       setFetchingSmallestEntries(true);
       toast.loading("Fetching smallest entries...", { id: "smallest-entries" });
+      
+      console.log(`🔄 Fetching ${k} smallest entries for network: ${networkKey}`);
+      console.log(`📋 Contract address: ${config.contracts.cacheManager.address}`);
+      console.log(`🌐 Network config:`, {
+        chainId: config.chainId,
+        chainName: config.chainName,
+        rpc: config.rpc
+      });
 
-      const contract = await getContract(networkKey);
-      const smallestEntries = await contract.getSmallestEntries(k);
-      setSmallestEntries(smallestEntries);
+      const contractAddress = config.contracts.cacheManager.address as `0x${string}`;
+      const contractABI = config.contracts.cacheManager.abi;
+      
+      console.log(`🔍 Calling getSmallestEntries(${k}) with args:`, [BigInt(k)]);
 
-      toast.success(`Fetched ${k} smallest entries successfully!`, {
+      let result: any = null;
+      let lastError: any = null;
+
+      // Strategy 2: Try with direct RPC using ethers if Strategy 1 failed
+      if (!result || (Array.isArray(result) && result.length === 0)) {
+        try {
+          console.log(`⚙️ Strategy 2: Using ethers with direct RPC`);
+          
+          // Try different RPC endpoints
+          const rpcUrls = [
+            config.rpc.infura,
+            config.rpc.alchemy, 
+            config.rpc.default
+          ].filter(Boolean);
+
+          for (const rpcUrl of rpcUrls) {
+            try {
+              if (!rpcUrl) {
+                console.warn(`⚠️ Skipping null/undefined RPC URL`);
+                continue;
+              }
+              console.log(`🔍 Trying RPC: ${rpcUrl}`);
+              const provider = new ethers.JsonRpcProvider(rpcUrl as string);
+              const contract = new ethers.Contract(contractAddress, contractABI, provider);
+              
+              result = await retryWithBackoff(async () => {
+                return await contract.getSmallestEntries(BigInt(k));
+              }, 2, 1500);
+              
+              if (result && Array.isArray(result) && result.length > 0) {
+                console.log(`✅ Strategy 2 SUCCESS with RPC ${rpcUrl}:`, result);
+                break;
+              }
+            } catch (rpcError: any) {
+              console.warn(`⚠️ RPC ${rpcUrl} failed:`, rpcError.message);
+              lastError = rpcError;
+            }
+          }
+        } catch (error: any) {
+          console.warn(`⚠️ Strategy 2 failed:`, error.message);
+          lastError = error;
+        }
+      }
+
+      // Strategy 3: Try with different parameter types if still no result
+      if (!result || (Array.isArray(result) && result.length === 0)) {
+        try {
+          console.log(`⚙️ Strategy 3: Trying with different parameter types`);
+          
+          if (publicClient) {
+            // Try with regular number instead of BigInt
+            result = await publicClient.readContract({
+              address: contractAddress,
+              abi: contractABI,
+              functionName: 'getSmallestEntries',
+              args: [parseInt(k)] // Try regular number
+            });
+            
+            if (result && Array.isArray(result) && result.length > 0) {
+              console.log(`✅ Strategy 3 SUCCESS with regular number:`, result);
+            }
+          }
+        } catch (error: any) {
+          console.warn(`⚠️ Strategy 3 failed:`, error.message);
+          lastError = error;
+        }
+      }
+
+      // Check if we got any results
+      if (!result || (Array.isArray(result) && result.length === 0)) {
+        console.error(`❌ All strategies failed. Last error:`, lastError);
+        throw new Error(`All RPC strategies failed. Contract may be empty or function unavailable. Last error: ${lastError?.message || 'Unknown'}`);
+      }
+
+      console.log(`✅ Final result:`, result);
+      console.log(`📊 Result type:`, typeof result, 'Array:', Array.isArray(result));
+      
+      // Format the result for display
+      const formattedEntries = Array.isArray(result) 
+        ? result.map((entry: any, index: number) => {
+            console.log(`📝 Processing entry ${index}:`, entry);
+            
+            // Handle different result formats
+            if (Array.isArray(entry) && entry.length >= 3) {
+              // Tuple format: [codeHash, size, bid]
+              const codeHash = entry[0]?.toString() || '0x0';
+              const size = entry[1]?.toString() || '0';
+              const bid = entry[2]?.toString() || '0';
+              return `Entry ${index + 1}: Hash: ${codeHash.slice(0, 10)}..., Size: ${size}, Bid: ${bid}`;
+            } else if (entry && typeof entry === 'object' && entry.code) {
+              // Object format: {code, size, bid}
+              const codeHash = entry.code?.toString() || '0x0';
+              const size = entry.size?.toString() || '0';
+              const bid = entry.bid?.toString() || '0';
+              return `Entry ${index + 1}: Hash: ${codeHash.slice(0, 10)}..., Size: ${size}, Bid: ${bid}`;
+            } else {
+              // Unknown format
+              return `Entry ${index + 1}: ${JSON.stringify(entry)}`;
+            }
+          })
+        : [`Result: ${JSON.stringify(result)}`];
+      
+      console.log(`✅ Formatted entries:`, formattedEntries);
+      
+      setSmallestEntries(formattedEntries);
+
+      toast.success(`Fetched ${formattedEntries.length} smallest entries successfully!`, {
         id: "smallest-entries",
       });
     } catch (error: any) {
-      console.error("Error fetching smallest entries:", error);
+      console.error("❌ Error fetching smallest entries:", error);
 
       // Parse error for user-friendly message
       let errorMessage = "Error fetching smallest entries";
       const errorString = String(error);
 
-      if (errorString.includes("transaction execution reverted")) {
-        errorMessage =
-          "Failed to fetch smallest entries: Contract execution failed";
-      } else if (errorString.includes("network")) {
-        errorMessage = "Failed to fetch smallest entries: Network error";
-      } else if (error?.message && error.message.length <= 100) {
+      if (errorString.includes("returned no data") || errorString.includes("0x")) {
+        errorMessage = "Contract returned no data. The cache might be empty or the function is not available on this network.";
+      } else if (errorString.includes("execution reverted") || errorString.includes("revert")) {
+        errorMessage = "Contract execution failed. The function may have validation errors or contract is paused.";
+      } else if (errorString.includes("network") || errorString.includes("connection")) {
+        errorMessage = "Network connection error. Please check your internet connection and try again.";
+      } else if (errorString.includes("CALL_EXCEPTION")) {
+        errorMessage = "Contract call failed. Please verify the contract is deployed and accessible.";
+      } else if (error?.message && error.message.length <= 200) {
         errorMessage = `Failed to fetch smallest entries: ${error.message}`;
       } else {
-        errorMessage =
-          "Failed to fetch smallest entries: Unable to retrieve data";
+        errorMessage = "Unable to fetch smallest entries. Please try again later or check if the cache has entries.";
       }
 
       toast.error(errorMessage, { id: "smallest-entries" });
@@ -1833,6 +1960,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
               filteredEntries={filteredEntries}
               paginatedEntries={paginatedEntries}
               entriesPerPage={entriesPerPage}
+              setEntriesPerPage={setEntriesPerPage}
               currentPage={currentPage}
               pageCount={pageCount}
               setCurrentPage={setCurrentPage}

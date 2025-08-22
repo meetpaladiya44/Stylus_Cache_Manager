@@ -1,19 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Trophy,
   Zap,
-  DollarSign,
-  Calendar,
-  ExternalLink,
-  Filter,
   Loader2,
-  Wifi,
-  WifiOff,
   RefreshCw,
   Database,
-  AlertCircle,
   Wallet,
   Copy,
   Check,
@@ -34,6 +27,9 @@ interface Contract {
   usingUI?: boolean;
   byCLI?: boolean;
   usingAutoCacheFlag?: boolean;
+  txHash: string;
+  evictionThresholdDate?: string;
+  bidPlacedAt?: string;
 }
 
 interface Stats {
@@ -41,6 +37,13 @@ interface Stats {
   totalContracts: number;
   avgMinBid: number;
   uniqueDeployers: number;
+}
+
+interface NetworkStats {
+  mainnetContracts: number;
+  testnetContracts: number;
+  totalMainnetGasSaved: number;
+  totalTestnetGasSaved: number;
 }
 
 interface Pagination {
@@ -52,24 +55,51 @@ interface Pagination {
   hasPrev: boolean;
 }
 
+type SortField =
+  | "rank"
+  | "contractAddress"
+  | "deployedBy"
+  | "deployedVia"
+  | "network"
+  | "gasSaved"
+  | "minBidRequired"
+  | "expiry";
+
+type SortDirection = "asc" | "desc";
+
 const LeaderboardDashboard: React.FC = () => {
-  const [sortBy, setSortBy] = useState<"gasSaved" | "minBidRequired">(
-    "gasSaved"
-  );
   const [selectedNetwork, setSelectedNetwork] = useState<string>("all");
   const [data, setData] = useState<Contract[]>([]);
+  const [sortedData, setSortedData] = useState<Contract[]>([]);
   const [stats, setStats] = useState<Stats>({
     totalGasSaved: 0,
     totalContracts: 0,
     avgMinBid: 0,
     uniqueDeployers: 0,
   });
+  const [networkStats, setNetworkStats] = useState<NetworkStats>({
+    mainnetContracts: 0,
+    testnetContracts: 0,
+    totalMainnetGasSaved: 0,
+    totalTestnetGasSaved: 0,
+  });
+  const [networkStatsLoaded, setNetworkStatsLoaded] = useState<boolean>(false);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
   const [networks, setNetworks] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState<boolean>(true);
+  const [sortField, setSortField] = useState<SortField>("gasSaved");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  
+  // ✅ FIXED: Add scroll position preservation
+  const [scrollPosition, setScrollPosition] = useState<number>(0);
+  const tableContainerRef = useRef<HTMLDivElement | null>(null);
 
-  // Use the custom pagination hook
+  // ✅ FIXED: Enhanced pagination hook with improved scroll preservation
   const {
     pagination,
     currentPage,
@@ -83,8 +113,30 @@ const LeaderboardDashboard: React.FC = () => {
   } = usePagination({
     initialPage: 1,
     initialLimit: 50,
-    onPageChange: (page: number) => {
-      return fetchLeaderboardData(selectedNetwork, sortBy, page);
+    onPageChange: async (page: number) => {
+      try {
+        // Store current scroll position before page change
+        const currentScroll = window.scrollY;
+        setScrollPosition(currentScroll);
+        
+        console.log(`🔄 Changing to page ${page}`);
+        
+        // Fetch new data
+        await fetchLeaderboardData(selectedNetwork, "gasSaved", page);
+        
+        // ✅ FIXED: Use requestAnimationFrame for smooth scroll restoration without causing re-renders
+        requestAnimationFrame(() => {
+          window.scrollTo({
+            top: currentScroll,
+            behavior: 'auto'
+          });
+        });
+        
+        console.log(`✅ Page ${page} loaded successfully`);
+      } catch (error) {
+        console.error(`❌ Error loading page ${page}:`, error);
+        throw error; // Re-throw to let pagination component handle it
+      }
     },
   });
 
@@ -125,14 +177,27 @@ const LeaderboardDashboard: React.FC = () => {
     }
   };
 
-  // Fetch data from API
+  // ✅ FIXED: Add request tracking to prevent duplicate API calls
+  const currentApiRequest = useRef<Promise<void> | null>(null);
+  const isApiCallInProgress = useRef<boolean>(false);
+
+  // Fetch data from API with duplicate call prevention
   const fetchLeaderboardData = async (
     network: string = selectedNetwork,
-    sort: string = sortBy,
+    sort: string = "gasSaved", 
     page: number = currentPage
   ): Promise<void> => {
+    // Prevent duplicate API calls
+    if (isApiCallInProgress.current) {
+      console.log('⏸️ API call already in progress, skipping duplicate');
+      return;
+    }
+
     try {
+      isApiCallInProgress.current = true;
       setError(null);
+      
+      console.log(`📡 API Call: page=${page}, network=${network}`);
 
       const queryParams = new URLSearchParams({
         network: network === "all" ? "all" : network,
@@ -149,7 +214,10 @@ const LeaderboardDashboard: React.FC = () => {
         throw new Error(result.message || "Failed to fetch data");
       }
 
-      setData(result.data || []);
+      const contractsData = result.data || [];
+      
+      // ✅ FIXED: Batch state updates to prevent multiple re-renders
+      setData(contractsData);
       setStats(
         result.stats || {
           totalGasSaved: 0,
@@ -158,6 +226,7 @@ const LeaderboardDashboard: React.FC = () => {
           uniqueDeployers: 0,
         }
       );
+      
       setNetworks(result.networks || []);
 
       // Update pagination data using the hook
@@ -172,33 +241,317 @@ const LeaderboardDashboard: React.FC = () => {
 
       // Set initial loading to false once first data arrives
       setInitialLoading(false);
+      
+      console.log(`✅ API Success: page=${page}, contracts=${contractsData.length}`);
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "An error occurred";
       setError(errorMessage);
-      console.error("Error fetching leaderboard data:", err);
+      console.error("❌ API Error:", err);
       setData([]);
       // Set initial loading to false even on error
       setInitialLoading(false);
+    } finally {
+      isApiCallInProgress.current = false;
     }
   };
 
-  // Refresh data
+  // This ensures mainnet/testnet counts don't change when paginating
+  const fetchNetworkTotals = async (): Promise<void> => {
+    try {
+      const [mainnetResponse, testnetResponse] = await Promise.all([
+        fetch('/api/dashboard?network=arbitrum-one&limit=1'),
+        fetch('/api/dashboard?network=arbitrum-sepolia&limit=1')
+      ]);
+      
+      const [mainnetResult, testnetResult] = await Promise.all([
+        mainnetResponse.json(),
+        testnetResponse.json()
+      ]);
+      
+      if (mainnetResult.success && testnetResult.success) {
+        setNetworkStats({
+          mainnetContracts: mainnetResult.stats?.totalContracts || 0,
+          testnetContracts: testnetResult.stats?.totalContracts || 0,
+          totalMainnetGasSaved: mainnetResult.stats?.totalGasSaved || 0,
+          totalTestnetGasSaved: testnetResult.stats?.totalGasSaved || 0,
+        });
+        setNetworkStatsLoaded(true);
+        console.log('⚡ Network stats loaded:', {
+          mainnet: mainnetResult.stats?.totalContracts || 0,
+          testnet: testnetResult.stats?.totalContracts || 0
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error fetching network totals:', error);
+      // Set defaults on error
+      setNetworkStats({
+        mainnetContracts: 0,
+        testnetContracts: 0,
+        totalMainnetGasSaved: 0,
+        totalTestnetGasSaved: 0,
+      });
+      setNetworkStatsLoaded(true);
+    }
+  };
+
+  // Refresh data - OPTIMIZED with parallel requests!
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchLeaderboardData(selectedNetwork, sortBy, currentPage);
+    const refreshStartTime = performance.now();
+    
+    await Promise.all([
+      fetchLeaderboardData(selectedNetwork, "gasSaved", currentPage),
+      fetchNetworkTotals() // Also refresh network totals in parallel
+    ]);
+    
+    const refreshEndTime = performance.now();
+    console.log(`⚡ Dashboard refresh completed: ${(refreshEndTime - refreshStartTime).toFixed(2)}ms`);
     setRefreshing(false);
   };
+
+  // Effect to fetch network totals once on component mount
+  useEffect(() => {
+    if (!networkStatsLoaded) {
+      fetchNetworkTotals();
+    }
+  }, [networkStatsLoaded]);
 
   // Effect to fetch data on component mount and when filters change
   useEffect(() => {
     resetPagination(); // Reset pagination when filters change
     setInitialLoading(true); // Set initial loading when filters change
-    fetchLeaderboardData(selectedNetwork, sortBy, 1);
-  }, [selectedNetwork, sortBy, resetPagination]);
+    fetchLeaderboardData(selectedNetwork, "gasSaved", 1);
+  }, [selectedNetwork, resetPagination]);
+
+  // Toast auto-hide effect
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  // Sort data whenever data or sort parameters change
+  useEffect(() => {
+    const sorted = [...data].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (sortField) {
+        case "rank":
+          // Use current ranking based on gasSaved (default sorting)
+          const aRank = (pagination.page - 1) * pagination.limit + data.indexOf(a) + 1;
+          const bRank = (pagination.page - 1) * pagination.limit + data.indexOf(b) + 1;
+          aValue = aRank;
+          bValue = bRank;
+          break;
+        case "contractAddress":
+        case "deployedBy":
+          aValue = a[sortField]?.toLowerCase() || "";
+          bValue = b[sortField]?.toLowerCase() || "";
+          break;
+        case "deployedVia":
+          aValue = getDeployedViaDisplayName(a).toLowerCase();
+          bValue = getDeployedViaDisplayName(b).toLowerCase();
+          break;
+        case "network":
+          aValue = getNetworkDisplayName(a.network).toLowerCase();
+          bValue = getNetworkDisplayName(b.network).toLowerCase();
+          break;
+        case "gasSaved":
+          aValue = parseInt(String(a.gasSaved)) || 0;
+          bValue = parseInt(String(b.gasSaved)) || 0;
+          break;
+        case "minBidRequired":
+          aValue = parseFloat(String(a.minBidRequired)) || 0;
+          bValue = parseFloat(String(b.minBidRequired)) || 0;
+          break;
+        case "expiry":
+          const aExpiryDate = getContractExpiryDate(a);
+          const bExpiryDate = getContractExpiryDate(b);
+          aValue = aExpiryDate ? aExpiryDate.getTime() : 0;
+          bValue = bExpiryDate ? bExpiryDate.getTime() : 0;
+          break;
+        default:
+          aValue = 0;
+          bValue = 0;
+      }
+
+      if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
+      if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    setSortedData(sorted);
+  }, [data, sortField, sortDirection]);
+
+  // Handle column sorting
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  // Get sort icon for column headers
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return (
+        <svg
+          className="w-4 h-4 text-gray-400"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+          />
+        </svg>
+      );
+    }
+
+    return sortDirection === "asc" ? (
+      <svg
+        className="w-4 h-4 text-blue-400"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M5 15l7-7 7 7"
+        />
+      </svg>
+    ) : (
+      <svg
+        className="w-4 h-4 text-blue-400"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M19 9l-7 7-7-7"
+        />
+      </svg>
+    );
+  };
+
+  // Calculate enhanced stats with mainnet/testnet breakdown from total stats
+  const getEnhancedStats = () => {
+    return {
+      mainnet: {
+        total: networkStats.mainnetContracts,
+        active: networkStats.mainnetContracts,
+      },
+      testnet: {
+        total: networkStats.testnetContracts,
+        active: networkStats.testnetContracts,
+      },
+      total: {
+        contracts: stats.totalContracts,
+        active: stats.totalContracts, // In leaderboard context, all listed contracts are active
+      }
+    };
+  };
 
   const formatAddress = (address: string): string => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
+  // Get explorer URL for network-specific block explorers
+  const getExplorerUrl = (network: string, txHash: string) => {
+    const baseUrls: { [key: string]: string } = {
+      "arbitrum-one": "https://arbiscan.io/tx/",
+      "arbitrum-sepolia": "https://sepolia.arbiscan.io/tx/",
+    };
+
+    return `${baseUrls[network] || "https://arbiscan.io/tx/"}${txHash}`;
+  };
+
+  // Copy to clipboard with toast notification
+  const copyToClipboardWithToast = async (text: string, type: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setToast({ message: `${type} copied to clipboard!`, type: "success" });
+    } catch (err) {
+      setToast({ message: `Failed to copy ${type}`, type: "error" });
+    }
+  };
+
+  // Calculate expiry date from bidPlacedAt + 388 days (364 + 24)
+  const calculateExpiryDate = (bidPlacedAt: string): Date => {
+    const bidDate = new Date(bidPlacedAt);
+    const expiryDate = new Date(bidDate);
+    expiryDate.setDate(bidDate.getDate() + 388); // 364 + 24 days
+    return expiryDate;
+  };
+
+  // Get expiry date for a contract (either evictionThresholdDate or calculated from bidPlacedAt)
+  const getContractExpiryDate = (contract: Contract): Date | null => {
+    if (contract.evictionThresholdDate) {
+      return new Date(contract.evictionThresholdDate);
+    } else if (contract.bidPlacedAt) {
+      return calculateExpiryDate(contract.bidPlacedAt);
+    }
+    return null;
+  };
+
+  // Format date in IST timezone (date only, no time)
+  const formatDateIST = (date: Date | string | null): string => {
+    if (!date) return "-";
+    
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    
+    // Check if date is valid
+    if (isNaN(dateObj.getTime())) return "-";
+    
+    // Format in IST timezone - date only
+    return dateObj.toLocaleDateString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "short",
+      day: "numeric"
+    });
+  };
+
+  // Get status badge for expiry (Active/Expired)
+  const getExpiryStatusBadge = (contract: Contract) => {
+    const expiryDate = getContractExpiryDate(contract);
+    if (!expiryDate) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300">
+          Unknown
+        </span>
+      );
+    }
+
+    const now = new Date();
+    const isActive = expiryDate > now;
+
+    return (
+      <span
+        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+          isActive
+            ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
+            : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
+        }`}
+      >
+        {isActive ? "Active" : "Expired"}
+      </span>
+    );
   };
 
   const getNetworkColor = (network: string): string => {
@@ -443,33 +796,6 @@ const LeaderboardDashboard: React.FC = () => {
 
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-4 mb-8">
-          <div className="flex items-center gap-2">
-            <Filter className="w-5 h-5 text-gray-400" />
-            <select
-              value={sortBy}
-              onChange={(e) =>
-                setSortBy(e.target.value as "gasSaved" | "minBidRequired")
-              }
-              className="bg-zinc-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="gasSaved">Sort by Gas Saved</option>
-              <option value="minBidRequired">Sort by Min Bid</option>
-            </select>
-          </div>
-
-          {/* <select
-            value={selectedNetwork}
-            onChange={(e) => setSelectedNetwork(e.target.value)}
-            className="bg-zinc-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All Networks</option>
-            {networks.map((network) => (
-              <option key={network} value={network}>
-                {getNetworkDisplayName(network)}
-              </option>
-            ))}
-          </select> */}
-
           <button
             onClick={handleRefresh}
             disabled={refreshing}
@@ -482,7 +808,7 @@ const LeaderboardDashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* Stats Cards */}
+        {/* Enhanced Stats Cards */}
         {data.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <div className="bg-zinc-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
@@ -500,10 +826,27 @@ const LeaderboardDashboard: React.FC = () => {
             <div className="bg-zinc-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-400 text-sm">Active Contracts</p>
+                  <p className="text-gray-400 text-sm">Total Contracts</p>
                   <p className="text-2xl font-bold text-blue-400">
-                    {stats.totalContracts || 0}
+                    {getEnhancedStats().total.contracts.toLocaleString()}
                   </p>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    {networkStatsLoaded ? (
+                      <>
+                        <span className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded-full">
+                          Mainnet: {getEnhancedStats().mainnet.total.toLocaleString()}
+                        </span>
+                        <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full">
+                          Testnet: {getEnhancedStats().testnet.total.toLocaleString()}
+                        </span>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-16 bg-zinc-700/50 rounded animate-pulse"></div>
+                        <div className="h-4 w-16 bg-zinc-700/50 rounded animate-pulse"></div>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <Trophy className="w-8 h-8 text-blue-400" />
               </div>
@@ -535,17 +878,20 @@ const LeaderboardDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Leaderboard Table */}
-        <div className="bg-zinc-800/30 backdrop-blur-sm border border-gray-700 rounded-xl overflow-hidden relative">
+        {/* ✅ FIXED: Leaderboard Table with ref for scroll preservation */}
+        <div 
+          ref={tableContainerRef}
+          className="bg-zinc-800/30 backdrop-blur-sm border border-gray-700 rounded-xl overflow-hidden relative"
+        >
           {pageLoading && data.length > 0 && (
             <div className="absolute inset-0 bg-zinc-900/50 flex items-center justify-center z-10">
               <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
             </div>
           )}
 
-          {data.length === 0 && !pageLoading ? (
+          {sortedData.length === 0 && !pageLoading ? (
             <NoDataFound network={selectedNetwork} />
-          ) : data.length === 0 && pageLoading ? (
+          ) : sortedData.length === 0 && pageLoading ? (
             <div className="flex items-center justify-center py-16">
               <div className="text-center">
                 <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-400" />
@@ -557,31 +903,85 @@ const LeaderboardDashboard: React.FC = () => {
               <table className="w-full">
                 <thead>
                   <tr className="bg-zinc-800/50 border-b border-gray-700">
-                    <th className="text-left py-4 px-6 text-gray-300 font-semibold">
-                      Rank
+                    <th 
+                      className="text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200"
+                      onClick={() => handleSort("rank")}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>Rank</span>
+                        {getSortIcon("rank")}
+                      </div>
+                    </th>
+                    <th 
+                      className="text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200"
+                      onClick={() => handleSort("contractAddress")}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>Contract</span>
+                        {getSortIcon("contractAddress")}
+                      </div>
+                    </th>
+                    <th 
+                      className="text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200"
+                      onClick={() => handleSort("deployedBy")}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>Deployer</span>
+                        {getSortIcon("deployedBy")}
+                      </div>
+                    </th>
+                    <th 
+                      className="text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200"
+                      onClick={() => handleSort("deployedVia")}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>Deployed Via</span>
+                        {getSortIcon("deployedVia")}
+                      </div>
+                    </th>
+                    <th 
+                      className="text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200"
+                      onClick={() => handleSort("network")}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>Network</span>
+                        {getSortIcon("network")}
+                      </div>
+                    </th>
+                    <th 
+                      className="text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200"
+                      onClick={() => handleSort("gasSaved")}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>Gas Saved</span>
+                        {getSortIcon("gasSaved")}
+                      </div>
+                    </th>
+                    <th 
+                      className="text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200"
+                      onClick={() => handleSort("minBidRequired")}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>Bid Amount</span>
+                        {getSortIcon("minBidRequired")}
+                      </div>
+                    </th>
+                    <th 
+                      className="text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200"
+                      onClick={() => handleSort("expiry")}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>Expiry</span>
+                        {getSortIcon("expiry")}
+                      </div>
                     </th>
                     <th className="text-left py-4 px-6 text-gray-300 font-semibold">
-                      Contract
-                    </th>
-                    <th className="text-left py-4 px-6 text-gray-300 font-semibold">
-                      Deployer
-                    </th>
-                    <th className="text-left py-4 px-6 text-gray-300 font-semibold">
-                      Deployed Via
-                    </th>
-                    <th className="text-left py-4 px-6 text-gray-300 font-semibold">
-                      Network
-                    </th>
-                    <th className="text-left py-4 px-6 text-gray-300 font-semibold">
-                      Gas Saved
-                    </th>
-                    <th className="text-left py-4 px-6 text-gray-300 font-semibold">
-                      Bid Amount
+                      Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.map((contract, index) => (
+                  {sortedData.map((contract, index) => (
                     <tr
                       key={contract.contractAddress || contract._id}
                       className="border-b border-gray-700/50 hover:bg-zinc-700/20 transition-colors duration-200"
@@ -697,6 +1097,74 @@ const LeaderboardDashboard: React.FC = () => {
                           </span>
                         </div>
                       </td>
+
+                      <td className="py-4 px-6">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-300">
+                            {formatDateIST(getContractExpiryDate(contract))}
+                          </span>
+                          {getExpiryStatusBadge(contract)}
+                        </div>
+                      </td>
+
+                      <td className="py-4 px-6">
+                        <div className="flex items-center space-x-3">
+                          <button
+                            onClick={() =>
+                              window.open(
+                                getExplorerUrl(
+                                  contract.network,
+                                  contract.txHash
+                                ),
+                                "_blank"
+                              )
+                            }
+                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 transition-colors p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                            title="View transaction on explorer"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                              />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() =>
+                              copyToClipboardWithToast(
+                                getExplorerUrl(
+                                  contract.network,
+                                  contract.txHash
+                                ),
+                                "Transaction URL"
+                              )
+                            }
+                            className="text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300 transition-colors p-1 rounded hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                            title="Copy transaction URL"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -704,9 +1172,17 @@ const LeaderboardDashboard: React.FC = () => {
             </div>
           )}
 
-          {/* Enhanced Pagination Component */}
+          {/* ✅ FIXED: Enhanced Pagination Component with stable layout */}
           {pagination.totalPages > 1 && (
-            <div className="mt-8 px-6 py-8 bg-gradient-to-r from-zinc-800/30 via-zinc-800/20 to-zinc-800/30 backdrop-blur-sm border border-gray-700/50 rounded-2xl">
+            <div 
+              className="mt-8 px-6 py-8 bg-gradient-to-r from-zinc-800/30 via-zinc-800/20 to-zinc-800/30 backdrop-blur-sm border border-gray-700/50 rounded-2xl"
+              style={{
+                minHeight: '120px', // Ensure consistent height
+                opacity: 1,
+                visibility: 'visible',
+                position: 'relative'
+              }}
+            >
               <Pagination
                 currentPage={pagination.page}
                 totalPages={pagination.totalPages}
@@ -724,6 +1200,70 @@ const LeaderboardDashboard: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed top-4 right-4 z-50">
+          <div
+            className={`px-6 py-3 rounded-lg shadow-lg border ${
+              toast.type === "success"
+                ? "bg-green-50 border-green-200 text-green-800 dark:bg-green-900 dark:border-green-700 dark:text-green-200"
+                : "bg-red-50 border-red-200 text-red-800 dark:bg-red-900 dark:border-red-700 dark:text-red-200"
+            } animate-in slide-in-from-bottom-2 duration-300`}
+          >
+            <div className="flex items-center space-x-2">
+              {toast.type === "success" ? (
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              ) : (
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              )}
+              <span className="font-medium">{toast.message}</span>
+              <button
+                onClick={() => setToast(null)}
+                className="ml-2 text-current hover:opacity-70 transition-opacity"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

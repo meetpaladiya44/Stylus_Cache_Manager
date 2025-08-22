@@ -38,11 +38,13 @@ const FetchSmallestEntries: React.FC<FetchSmallestEntriesProps> = ({
               placeholder="Enter number"
               value={smallestEntriesCount}
               onChange={(e) => setSmallestEntriesCount(e.target.value)}
+              min="1"
+              max="50"
               className="flex-1 px-4 py-3 border border-zinc-600/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-300 bg-zinc-700/50 hover:bg-zinc-700/70 text-zinc-100 placeholder-zinc-400"
             />
             <button
               onClick={() => fetchSmallestEntries(smallestEntriesCount)}
-              className="group relative px-6 py-3 bg-gradient-to-r from-zinc-600 to-zinc-700 text-white rounded-xl font-medium transition-all duration-300 hover:from-zinc-700 hover:to-zinc-800 hover:shadow-lg hover:shadow-zinc-500/25 focus:outline-none focus:ring-2 focus:ring-zinc-500/50 focus:ring-offset-2 focus:ring-offset-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group relative px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-medium transition-all duration-300 hover:from-blue-700 hover:to-blue-800 hover:shadow-lg hover:shadow-blue-500/25 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 focus:ring-offset-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={fetchingSmallestEntries || !smallestEntriesCount}
             >
               <span className="flex items-center gap-2">
@@ -60,6 +62,9 @@ const FetchSmallestEntries: React.FC<FetchSmallestEntriesProps> = ({
               </span>
             </button>
           </div>
+          <p className="text-xs text-zinc-400 mt-2">
+            💡 This fetches the smallest cache entries by bid amount. If no results appear, the cache might be empty.
+          </p>
         </div>
         {smallestEntries && (
           <AnimatePresence>
@@ -76,16 +81,18 @@ const FetchSmallestEntries: React.FC<FetchSmallestEntriesProps> = ({
                     {smallestEntries.length} entries
                   </span>
                 </div>
-                <div className="max-h-48 overflow-y-auto space-y-2 p-4 bg-zinc-700/30 rounded-xl border border-zinc-600/50">
+                <div className="max-h-64 overflow-y-auto space-y-2 p-4 bg-zinc-700/30 rounded-xl border border-zinc-600/50">
                   {smallestEntries.map((entry, index) => (
                     <motion.div
                       key={index}
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      className="p-3 bg-zinc-800/50 rounded-lg border border-zinc-600/50 font-mono text-sm text-zinc-100 hover:shadow-sm hover:bg-zinc-700/50 transition-all duration-200"
+                      transition={{ delay: index * 0.05 }}
+                      className="p-3 bg-zinc-800/50 rounded-lg border border-zinc-600/50 hover:shadow-sm hover:bg-zinc-700/50 transition-all duration-200 group"
                     >
-                      {entry}
+                      <div className="font-mono text-xs text-zinc-100 break-all">
+                        {entry}
+                      </div>
                     </motion.div>
                   ))}
                 </div>
