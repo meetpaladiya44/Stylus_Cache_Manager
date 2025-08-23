@@ -57,13 +57,10 @@ interface Pagination {
 
 type SortField =
   | "rank"
-  | "contractAddress"
-  | "deployedBy"
   | "deployedVia"
   | "network"
   | "gasSaved"
-  | "minBidRequired"
-  | "expiry";
+  | "minBidRequired";
 
 type SortDirection = "asc" | "desc";
 
@@ -121,8 +118,16 @@ const LeaderboardDashboard: React.FC = () => {
         
         console.log(`🔄 Changing to page ${page}`);
         
-        // Fetch new data
-        await fetchLeaderboardData(selectedNetwork, "gasSaved", page);
+                 // Fetch new data with current sort settings
+         const sortFieldMapping: { [key in SortField]: string } = {
+           "rank": "gasSaved",
+           "deployedVia": "deployedVia",
+           "network": "network",
+           "gasSaved": "gasSaved",
+           "minBidRequired": "minBidRequired"
+         };
+         const apiSortField = sortFieldMapping[sortField];
+         await fetchLeaderboardData(selectedNetwork, apiSortField, page, sortDirection);
         
         // ✅ FIXED: Use requestAnimationFrame for smooth scroll restoration without causing re-renders
         requestAnimationFrame(() => {
@@ -181,28 +186,29 @@ const LeaderboardDashboard: React.FC = () => {
   const currentApiRequest = useRef<Promise<void> | null>(null);
   const isApiCallInProgress = useRef<boolean>(false);
 
-  // Fetch data from API with duplicate call prevention
+     // ✅ FIXED: Fetch data from API with global sorting support and duplicate call prevention
   const fetchLeaderboardData = async (
     network: string = selectedNetwork,
-    sort: string = "gasSaved", 
-    page: number = currentPage
+     sort: string = "gasSaved", 
+     page: number = currentPage,
+     sortOrder: SortDirection = "desc" // ✅ FIXED: Add sortOrder parameter
   ): Promise<void> => {
-    // Prevent duplicate API calls
-    if (isApiCallInProgress.current) {
-      console.log('⏸️ API call already in progress, skipping duplicate');
-      return;
-    }
-
-    try {
-      isApiCallInProgress.current = true;
+     // Prevent duplicate API calls
+     if (isApiCallInProgress.current) {
+       console.log('⏸️ API call already in progress, skipping duplicate');
+       return;
+     }
+ 
+     try {
+       isApiCallInProgress.current = true;
       setError(null);
-      
-      console.log(`📡 API Call: page=${page}, network=${network}`);
+       
+       console.log(`📡 GLOBAL API Call: page=${page}, network=${network}, sort=${sort}, order=${sortOrder}`);
 
       const queryParams = new URLSearchParams({
         network: network === "all" ? "all" : network,
         sortBy: sort,
-        sortOrder: "desc",
+         sortOrder: sortOrder, // ✅ FIXED: Use dynamic sortOrder
         page: page.toString(),
         limit: "50",
       });
@@ -300,10 +306,10 @@ const LeaderboardDashboard: React.FC = () => {
     setRefreshing(true);
     const refreshStartTime = performance.now();
     
-    await Promise.all([
-      fetchLeaderboardData(selectedNetwork, "gasSaved", currentPage),
-      fetchNetworkTotals() // Also refresh network totals in parallel
-    ]);
+         await Promise.all([
+       fetchLeaderboardData(selectedNetwork, "gasSaved", currentPage, "desc"),
+       fetchNetworkTotals() // Also refresh network totals in parallel
+     ]);
     
     const refreshEndTime = performance.now();
     console.log(`⚡ Dashboard refresh completed: ${(refreshEndTime - refreshStartTime).toFixed(2)}ms`);
@@ -321,7 +327,7 @@ const LeaderboardDashboard: React.FC = () => {
   useEffect(() => {
     resetPagination(); // Reset pagination when filters change
     setInitialLoading(true); // Set initial loading when filters change
-    fetchLeaderboardData(selectedNetwork, "gasSaved", 1);
+         fetchLeaderboardData(selectedNetwork, "gasSaved", 1, "desc");
   }, [selectedNetwork, resetPagination]);
 
   // Toast auto-hide effect
@@ -334,76 +340,72 @@ const LeaderboardDashboard: React.FC = () => {
     }
   }, [toast]);
 
-  // Sort data whenever data or sort parameters change
+  // ✅ FIXED: Remove client-side sorting - data comes pre-sorted from API globally across ALL records
   useEffect(() => {
-    const sorted = [...data].sort((a, b) => {
-      let aValue: any;
-      let bValue: any;
+    // Simply use the data as-is since it comes pre-sorted from the API globally
+    setSortedData(data);
+  }, [data]);
 
-      switch (sortField) {
-        case "rank":
-          // Use current ranking based on gasSaved (default sorting)
-          const aRank = (pagination.page - 1) * pagination.limit + data.indexOf(a) + 1;
-          const bRank = (pagination.page - 1) * pagination.limit + data.indexOf(b) + 1;
-          aValue = aRank;
-          bValue = bRank;
-          break;
-        case "contractAddress":
-        case "deployedBy":
-          aValue = a[sortField]?.toLowerCase() || "";
-          bValue = b[sortField]?.toLowerCase() || "";
-          break;
-        case "deployedVia":
-          aValue = getDeployedViaDisplayName(a).toLowerCase();
-          bValue = getDeployedViaDisplayName(b).toLowerCase();
-          break;
-        case "network":
-          aValue = getNetworkDisplayName(a.network).toLowerCase();
-          bValue = getNetworkDisplayName(b.network).toLowerCase();
-          break;
-        case "gasSaved":
-          aValue = parseInt(String(a.gasSaved)) || 0;
-          bValue = parseInt(String(b.gasSaved)) || 0;
-          break;
-        case "minBidRequired":
-          aValue = parseFloat(String(a.minBidRequired)) || 0;
-          bValue = parseFloat(String(b.minBidRequired)) || 0;
-          break;
-        case "expiry":
-          const aExpiryDate = getContractExpiryDate(a);
-          const bExpiryDate = getContractExpiryDate(b);
-          aValue = aExpiryDate ? aExpiryDate.getTime() : 0;
-          bValue = bExpiryDate ? bExpiryDate.getTime() : 0;
-          break;
-        default:
-          aValue = 0;
-          bValue = 0;
-      }
-
-      if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
-      if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
-      return 0;
-    });
-
-    setSortedData(sorted);
-  }, [data, sortField, sortDirection]);
-
-  // Handle column sorting
-  const handleSort = (field: SortField) => {
+  // ✅ PERFORMANCE: Optimized sorting with minimal loading states
+  const [sortingField, setSortingField] = useState<SortField | null>(null);
+  
+  const handleSort = async (field: SortField) => {
+    let newSortDirection: SortDirection;
+    
     if (sortField === field) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+      newSortDirection = sortDirection === "asc" ? "desc" : "asc";
+      setSortDirection(newSortDirection);
     } else {
       setSortField(field);
-      setSortDirection("asc");
+      newSortDirection = "desc"; // ✅ Default to desc for better UX (highest first)
+      setSortDirection(newSortDirection);
+    }
+
+    // ✅ PERFORMANCE: Show minimal sorting indicator instead of full loading
+    setSortingField(field);
+    
+    // ✅ SIMPLIFIED: Map frontend sort fields to API sort fields for GLOBAL database sorting
+    const sortFieldMapping: { [key in SortField]: string } = {
+      "rank": "gasSaved", // Rank is based on gas saved (global ranking)
+      "deployedVia": "deployedVia", // ✅ Will handle CLI/UI/Rust crate sorting in API
+      "network": "network",
+      "gasSaved": "gasSaved",
+      "minBidRequired": "minBidRequired"
+    };
+
+    const apiSortField = sortFieldMapping[field];
+    const startTime = performance.now();
+    console.log(`⚡ LIGHTNING SORT: ${field} → ${apiSortField} (${newSortDirection}) across ALL ${stats.totalContracts} contracts`);
+    
+    try {
+      // ✅ PERFORMANCE: Reset to page 1 + fetch with optimized loading
+      resetPagination(); // Reset pagination state
+      // ✅ Don't show initialLoading for sorts - use minimal indicator instead
+      await fetchLeaderboardData(selectedNetwork, apiSortField, 1, newSortDirection);
+      
+      const endTime = performance.now();
+      console.log(`🚀 Sort completed in ${(endTime - startTime).toFixed(2)}ms`);
+    } catch (error) {
+      console.error('❌ Error during global sort:', error);
+      setError('Failed to sort data. Please try again.');
+    } finally {
+      setSortingField(null); // Clear sorting indicator
     }
   };
 
-  // Get sort icon for column headers
+  // ✅ PERFORMANCE: Smart sort icon with loading indicator
   const getSortIcon = (field: SortField) => {
+    // Show loading spinner for currently sorting field
+    if (sortingField === field) {
+      return (
+        <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+      );
+    }
+    
     if (sortField !== field) {
       return (
         <svg
-          className="w-4 h-4 text-gray-400"
+          className="w-4 h-4 text-gray-400 group-hover:text-gray-300 transition-colors"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -449,23 +451,44 @@ const LeaderboardDashboard: React.FC = () => {
     );
   };
 
-  // Calculate enhanced stats with mainnet/testnet breakdown from total stats
-  const getEnhancedStats = () => {
-    return {
-      mainnet: {
-        total: networkStats.mainnetContracts,
-        active: networkStats.mainnetContracts,
-      },
-      testnet: {
-        total: networkStats.testnetContracts,
-        active: networkStats.testnetContracts,
-      },
-      total: {
-        contracts: stats.totalContracts,
-        active: stats.totalContracts, // In leaderboard context, all listed contracts are active
-      }
-    };
-  };
+     // ✅ FIXED: Calculate active contracts count (contracts that haven't expired)
+   const getActiveContractsCount = (): number => {
+     if (!data || data.length === 0) return 0;
+     
+     const currentDate = new Date();
+     let activeInCurrentPage = 0;
+     
+     data.forEach((contract: Contract) => {
+       const expiryDate = getContractExpiryDate(contract);
+       if (expiryDate && expiryDate > currentDate) {
+         activeInCurrentPage++;
+       }
+     });
+     
+     // Estimate total active contracts based on current page ratio
+     const activeRatio = data.length > 0 ? activeInCurrentPage / data.length : 0;
+     return Math.round(stats.totalContracts * activeRatio);
+   };
+
+   // Calculate enhanced stats with mainnet/testnet breakdown from total stats
+   const getEnhancedStats = () => {
+     const activeCount = getActiveContractsCount();
+     
+     return {
+       mainnet: {
+         total: networkStats.mainnetContracts,
+         active: Math.round(networkStats.mainnetContracts * (activeCount / stats.totalContracts)),
+       },
+       testnet: {
+         total: networkStats.testnetContracts,
+         active: Math.round(networkStats.testnetContracts * (activeCount / stats.totalContracts)),
+       },
+       total: {
+         contracts: stats.totalContracts,
+         active: activeCount,
+       }
+     };
+   };
 
   const formatAddress = (address: string): string => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -787,26 +810,12 @@ const LeaderboardDashboard: React.FC = () => {
             onReset={() => {
               setError(null);
               resetPagination();
-              fetchLeaderboardData("all", "gasSaved", 1);
+               fetchLeaderboardData("all", "gasSaved", 1, "desc");
             }}
             showDetails={true}
             className="mb-6"
           />
         )}
-
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-8">
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="flex items-center gap-2 bg-zinc-700 hover:bg-zinc-600 px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50"
-          >
-            <RefreshCw
-              className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
-            />
-            Refresh
-          </button>
-        </div>
 
         {/* Enhanced Stats Cards */}
         {data.length > 0 && (
@@ -855,12 +864,17 @@ const LeaderboardDashboard: React.FC = () => {
             <div className="bg-zinc-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-400 text-sm">Avg Bid Amount</p>
+                   <p className="text-gray-400 text-sm">Active Contracts</p>
                   <p className="text-2xl font-bold text-purple-400">
-                    {stats.avgMinBid?.toFixed(3) || "0.000"} ETH
+                     {getActiveContractsCount().toLocaleString()}
+                   </p>
+                   <p className="text-xs text-gray-500 mt-1">
+                     {((getActiveContractsCount() / stats.totalContracts) * 100).toFixed(1)}% of total
                   </p>
                 </div>
-                <Wallet className="w-8 h-8 text-purple-400" />
+                 <svg className="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                 </svg>
               </div>
             </div>
 
@@ -883,9 +897,12 @@ const LeaderboardDashboard: React.FC = () => {
           ref={tableContainerRef}
           className="bg-zinc-800/30 backdrop-blur-sm border border-gray-700 rounded-xl overflow-hidden relative"
         >
-          {pageLoading && data.length > 0 && (
+                     {pageLoading && data.length > 0 && !sortingField && (
             <div className="absolute inset-0 bg-zinc-900/50 flex items-center justify-center z-10">
-              <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
+               <div className="flex items-center gap-2 text-blue-400">
+                 <Loader2 className="w-6 h-6 animate-spin" />
+                 <span className="text-sm">Loading page...</span>
+               </div>
             </div>
           )}
 
@@ -903,80 +920,62 @@ const LeaderboardDashboard: React.FC = () => {
               <table className="w-full">
                 <thead>
                   <tr className="bg-zinc-800/50 border-b border-gray-700">
-                    <th 
-                      className="text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200"
-                      onClick={() => handleSort("rank")}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span>Rank</span>
-                        {getSortIcon("rank")}
-                      </div>
+                                         <th 
+                       className="group text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200 whitespace-nowrap"
+                       onClick={() => handleSort("rank")}
+                     >
+                       <div className="flex items-center gap-2 whitespace-nowrap">
+                         <span>Rank</span>
+                         {getSortIcon("rank")}
+                       </div>
                     </th>
-                    <th 
-                      className="text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200"
-                      onClick={() => handleSort("contractAddress")}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span>Contract</span>
-                        {getSortIcon("contractAddress")}
-                      </div>
+                     <th className="text-left py-4 px-6 text-gray-300 font-semibold whitespace-nowrap">
+                       <span>Contract</span>
                     </th>
-                    <th 
-                      className="text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200"
-                      onClick={() => handleSort("deployedBy")}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span>Deployer</span>
-                        {getSortIcon("deployedBy")}
-                      </div>
+                     <th className="text-left py-4 px-6 text-gray-300 font-semibold whitespace-nowrap">
+                       <span>Deployer</span>
                     </th>
-                    <th 
-                      className="text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200"
-                      onClick={() => handleSort("deployedVia")}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span>Deployed Via</span>
-                        {getSortIcon("deployedVia")}
-                      </div>
+                     <th 
+                       className="group text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200 whitespace-nowrap"
+                       onClick={() => handleSort("deployedVia")}
+                     >
+                       <div className="flex items-center gap-2 whitespace-nowrap">
+                         <span>Deployed Via</span>
+                         {getSortIcon("deployedVia")}
+                       </div>
                     </th>
-                    <th 
-                      className="text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200"
-                      onClick={() => handleSort("network")}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span>Network</span>
-                        {getSortIcon("network")}
-                      </div>
+                     <th 
+                       className="group text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200 whitespace-nowrap"
+                       onClick={() => handleSort("network")}
+                     >
+                       <div className="flex items-center gap-2 whitespace-nowrap">
+                         <span>Network</span>
+                         {getSortIcon("network")}
+                       </div>
                     </th>
-                    <th 
-                      className="text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200"
-                      onClick={() => handleSort("gasSaved")}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span>Gas Saved</span>
-                        {getSortIcon("gasSaved")}
-                      </div>
+                     <th 
+                       className="group text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200 whitespace-nowrap"
+                       onClick={() => handleSort("gasSaved")}
+                     >
+                       <div className="flex items-center gap-2 whitespace-nowrap">
+                         <span>Gas Saved</span>
+                         {getSortIcon("gasSaved")}
+                       </div>
                     </th>
-                    <th 
-                      className="text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200"
-                      onClick={() => handleSort("minBidRequired")}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span>Bid Amount</span>
-                        {getSortIcon("minBidRequired")}
-                      </div>
-                    </th>
-                    <th 
-                      className="text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200"
-                      onClick={() => handleSort("expiry")}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span>Expiry</span>
-                        {getSortIcon("expiry")}
-                      </div>
-                    </th>
-                    <th className="text-left py-4 px-6 text-gray-300 font-semibold">
-                      Actions
+                     <th 
+                       className="group text-left py-4 px-6 text-gray-300 font-semibold cursor-pointer hover:bg-zinc-700/30 transition-colors duration-200 whitespace-nowrap"
+                       onClick={() => handleSort("minBidRequired")}
+                     >
+                       <div className="flex items-center gap-2 whitespace-nowrap">
+                         <span>Bid Amount</span>
+                         {getSortIcon("minBidRequired")}
+                       </div>
+                     </th>
+                     <th className="text-left py-4 px-6 text-gray-300 font-semibold whitespace-nowrap">
+                       <span>Expiry</span>
+                     </th>
+                     <th className="text-left py-4 px-6 text-gray-300 font-semibold whitespace-nowrap">
+                       Actions
                     </th>
                   </tr>
                 </thead>
@@ -986,13 +985,13 @@ const LeaderboardDashboard: React.FC = () => {
                       key={contract.contractAddress || contract._id}
                       className="border-b border-gray-700/50 hover:bg-zinc-700/20 transition-colors duration-200"
                     >
-                      <td className="py-4 px-6">
+                                             <td className="py-4 px-6 whitespace-nowrap">
                         <div className="flex items-center">
                           {getRankIcon(index)}
                         </div>
                       </td>
 
-                      <td className="py-4 px-6">
+                       <td className="py-4 px-6 whitespace-nowrap">
                         <div className="font-mono text-sm flex items-center gap-2">
                           <span className="text-white">
                             {formatAddress(contract.contractAddress)}
@@ -1024,7 +1023,7 @@ const LeaderboardDashboard: React.FC = () => {
                         </div>
                       </td>
 
-                      <td className="py-4 px-6">
+                                             <td className="py-4 px-6 whitespace-nowrap">
                         <div className="font-mono text-sm flex items-center gap-2">
                           <span className="text-white">
                             {formatAddress(contract.deployedBy)}
@@ -1056,12 +1055,12 @@ const LeaderboardDashboard: React.FC = () => {
                         </div>
                       </td>
 
-                      <td className="py-4 px-6">
+                       <td className="py-4 px-6 whitespace-nowrap">
                         <div className="flex items-center">
                           <span
                             className={`inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-medium border ${getDeployedViaColor(
                               contract
-                            )} transition-all duration-200 hover:scale-105`}
+                             )} transition-all duration-200 hover:scale-105 whitespace-nowrap`}
                           >
                             {getDeployedViaIcon(contract)}
                             {getDeployedViaDisplayName(contract)}
@@ -1069,17 +1068,17 @@ const LeaderboardDashboard: React.FC = () => {
                         </div>
                       </td>
 
-                      <td className="py-4 px-6">
+                       <td className="py-4 px-6 whitespace-nowrap">
                         <span
                           className={`inline-flex items-center px-2.5 py-2 rounded-xl text-xs font-medium ${getNetworkColor(
                             contract.network
-                          )}`}
+                           )} whitespace-nowrap`}
                         >
                           {getNetworkDisplayName(contract.network)}
                         </span>
                       </td>
 
-                      <td className="py-4 px-6">
+                       <td className="py-4 px-6 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <Zap className="w-4 h-4 text-green-400" />
                           <span className="text-green-400 font-semibold">
@@ -1090,24 +1089,24 @@ const LeaderboardDashboard: React.FC = () => {
                         </div>
                       </td>
 
-                      <td className="py-4 px-6">
+                       <td className="py-4 px-6 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <span className="text-yellow-400">
                             {contract.minBidRequired} ETH
                           </span>
-                        </div>
-                      </td>
+                         </div>
+                       </td>
 
-                      <td className="py-4 px-6">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-300">
-                            {formatDateIST(getContractExpiryDate(contract))}
-                          </span>
-                          {getExpiryStatusBadge(contract)}
-                        </div>
-                      </td>
+                       <td className="py-4 px-6 whitespace-nowrap">
+                         <div className="flex items-center gap-2">
+                           <span className="text-sm text-gray-300">
+                             {formatDateIST(getContractExpiryDate(contract))}
+                           </span>
+                           {getExpiryStatusBadge(contract)}
+                         </div>
+                       </td>
 
-                      <td className="py-4 px-6">
+                       <td className="py-4 px-6 whitespace-nowrap">
                         <div className="flex items-center space-x-3">
                           <button
                             onClick={() =>

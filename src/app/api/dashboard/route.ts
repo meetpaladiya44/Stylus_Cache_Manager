@@ -61,16 +61,24 @@ const CONTRACT_PROJECTION = {
 const SORT_MAPPING: { [key: string]: string } = {
   gasSaved: 'gasSaved',
   minBidRequired: 'minBidRequired', 
-  contractAddress: 'contractAddress',
-  deployedBy: 'deployedBy',
   network: 'network',
-  expiry: 'evictionThresholdDate'
+  deployedVia: 'deployedVia'
 };
 
-// Build optimized sort object
+// ✅ FIXED: Build optimized sort object with special handling for deployedVia
 const buildSortObject = (sortBy: string, sortOrder: string): { [key: string]: 1 | -1 } => {
   const field = SORT_MAPPING[sortBy] || 'gasSaved';
   const order = sortOrder === 'asc' ? 1 : -1;
+  
+  // Special handling for deployedVia - create a computed sort field
+  if (sortBy === 'deployedVia') {
+    // MongoDB will sort by this computed field: Web UI < CLI Tool < Rust Crate
+    return { 
+      deployedViaSort: order,
+      gasSaved: -1 // Secondary sort by gas saved for consistency
+    };
+  }
+  
   return { [field]: order };
 };
 
@@ -112,24 +120,74 @@ export async function GET(request: NextRequest): Promise<NextResponse<Leaderboar
     const limit = Math.min(100, Math.max(10, parseInt(searchParams.get("limit") || "50")));
     const skip = (page - 1) * limit;
 
-    // Connect to database
+    // ✅ PERFORMANCE: Connect to database with optimized settings
     const client = await getMongoClient();
     const db = client.db("smartcache");
     const collection = db.collection("contracts");
+
+    // ✅ PERFORMANCE: Ensure critical indexes exist for optimal query performance
+    try {
+      await Promise.all([
+        collection.createIndex({ gasSaved: -1 }),
+        collection.createIndex({ network: 1, gasSaved: -1 }),
+        collection.createIndex({ minBidRequired: 1 }),
+        collection.createIndex({ usingUI: 1, byCLI: 1, usingAutoCacheFlag: 1 }) // For deployedVia sorting
+      ]);
+    } catch (indexError) {
+      // Indexes might already exist, continue silently
+      console.log('⚠️ Index creation skipped (may already exist)');
+    }
 
     // Build query filter and sort
     const matchStage = network !== "all" ? { network } : {};
     const sortObj = buildSortObject(sortBy, sortOrder);
 
-    // Execute all queries in parallel for optimal performance
-    const [contractsResult, statsResult, networksResult, totalCount] = await Promise.all([
-      // Query 1: Get paginated contracts with sorting
-      collection
+    // ✅ SIMPLIFIED: Handle deployedVia sorting with aggregation, others with standard sorting
+    let contractsQuery;
+    
+    if (sortBy === 'deployedVia') {
+      // Handle deployedVia with MongoDB aggregation
+      contractsQuery = collection.aggregate([
+        ...(Object.keys(matchStage).length > 0 ? [{ $match: matchStage }] : []),
+        {
+          $addFields: {
+            deployedViaSort: {
+              $cond: {
+                if: "$usingUI", then: 1,
+                else: {
+                  $cond: {
+                    if: "$byCLI", then: 2,
+                    else: {
+                      $cond: {
+                        if: "$usingAutoCacheFlag", then: 3,
+                        else: 4 // Unknown
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        { $sort: { deployedViaSort: sortOrder === 'asc' ? 1 : -1, gasSaved: -1 } },
+        { $skip: skip },
+        { $limit: limit },
+        { $project: CONTRACT_PROJECTION }
+      ]).toArray();
+    } else {
+      // Standard sorting for gasSaved, minBidRequired, network
+      contractsQuery = collection
         .find(matchStage, { projection: CONTRACT_PROJECTION })
         .sort(sortObj)
         .skip(skip)
         .limit(limit)
-        .toArray(),
+        .toArray();
+    }
+
+    // Execute all queries in parallel for optimal performance
+    const [contractsResult, statsResult, networksResult, totalCount] = await Promise.all([
+      // Query 1: Get paginated contracts with sorting (now supports deployedVia)
+      contractsQuery,
 
       // Query 2: Get aggregated stats
       collection
@@ -143,7 +201,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<Leaderboar
       collection.countDocuments(matchStage)
     ]);
 
-    // Process contracts (already in correct format due to projection)
+    // ✅ SIMPLIFIED: Process contracts (data comes pre-sorted from MongoDB)
     const contracts: Contract[] = contractsResult.map((doc: any) => ({
       contractAddress: doc.contractAddress,
       network: doc.network,
@@ -177,11 +235,17 @@ export async function GET(request: NextRequest): Promise<NextResponse<Leaderboar
     // Performance monitoring
     console.log(`⚡ Dashboard API: ${responseTime}ms`);
     
-    // Determine cache duration based on data freshness needs
-    const cacheMaxAge = network === "all" ? 60 : 30; // 1 min for all, 30 sec for specific network
-    const staleWhileRevalidate = cacheMaxAge;
+    // ✅ PERFORMANCE: Aggressive caching for sorting operations
+    const cacheMaxAge = sortBy !== "gasSaved" ? 300 : 60; // 5 min for non-default sorts, 1 min for default
+    const staleWhileRevalidate = cacheMaxAge * 2;
+    const isDefaultSort = sortBy === "gasSaved" && sortOrder === "desc" && page === 1;
+    
+    // Performance monitoring and alerting
+    if (parseFloat(responseTime) > 1000) {
+      console.warn(`⚠️ Slow API response: ${responseTime}ms for ${sortBy}-${sortOrder}-page${page}`);
+    }
 
-    // Return response with proper HTTP caching headers
+    // Return response with aggressive caching for better performance
     return NextResponse.json({
       success: true,
       data: contracts,
@@ -197,13 +261,18 @@ export async function GET(request: NextRequest): Promise<NextResponse<Leaderboar
       },
     }, {
       headers: {
-        // HTTP caching for browsers and CDNs
+        // ✅ PERFORMANCE: Aggressive HTTP caching for sorting operations
         'Cache-Control': `public, max-age=${cacheMaxAge}, stale-while-revalidate=${staleWhileRevalidate}`,
-        // Response metadata
+        // ETags for efficient cache validation
+        'ETag': `"${network}-${sortBy}-${sortOrder}-${page}"`,
+        // Response metadata for debugging
         'X-Response-Time': `${responseTime}ms`,
         'X-Total-Count': totalCount.toString(),
+        'X-Cache-Strategy': isDefaultSort ? 'default' : 'sort-optimized',
         // CORS and content type optimization
         'Content-Type': 'application/json',
+        // Prevent unnecessary requests
+        'Vary': 'Accept-Encoding',
       },
     });
 
