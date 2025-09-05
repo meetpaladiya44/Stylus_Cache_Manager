@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import Hero from "../assets/SmartCache_logo.svg";
 import { useEffect, useState } from 'react'
-import { X, Menu, Activity, Database, Brain, User } from 'lucide-react'
+import { X, Menu, Activity, Database, BookOpen, User } from 'lucide-react'
 import ConnectWallet from "./ConnectWallet";
 
 const Navbar = () => {
@@ -104,6 +104,16 @@ const Navbar = () => {
                 <span className="relative z-10">My Profile</span>
                 <div className="absolute inset-0 bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-xl scale-0 group-hover:scale-100 transition-transform duration-300"></div>
               </Link>
+              <Link
+                href="https://smartcache.gitbook.io/smartcache-docs/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="relative group flex items-center gap-2.5 px-5 py-2.5 text-sm font-medium text-zinc-300 hover:text-zinc-100 transition-all duration-300 rounded-xl hover:bg-zinc-800/60"
+              >
+                <BookOpen className="w-4 h-4 group-hover:text-purple-400 transition-colors duration-300" />
+                <span className="relative z-10">Docs</span>
+                <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 to-fuchsia-500/10 rounded-xl scale-0 group-hover:scale-100 transition-transform duration-300"></div>
+              </Link>
 
               {/* Connect Wallet Button - Desktop */}
               <div className="hidden md:flex items-center">
@@ -171,6 +181,16 @@ const Navbar = () => {
                 >
                   <User className="w-5 h-5 text-green-400" />
                   My Profile
+                </Link>
+                <Link
+                  href="https://smartcache.gitbook.io/smartcache-docs/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={closeMobileMenu}
+                  className="flex items-center gap-3 px-4 py-3.5 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/60 rounded-xl transition-all duration-200 text-base font-medium border border-transparent hover:border-zinc-700/60"
+                >
+                  <BookOpen className="w-5 h-5 text-purple-400" />
+                  Docs
                 </Link>
               </div>
 
