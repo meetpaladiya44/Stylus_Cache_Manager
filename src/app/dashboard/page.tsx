@@ -96,6 +96,67 @@ const LeaderboardDashboard: React.FC = () => {
   const [scrollPosition, setScrollPosition] = useState<number>(0);
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
 
+  // LocalStorage cache helpers (5-minute TTL)
+  const CACHE_TTL_MS = 5 * 60 * 1000;
+  const buildCacheKey = (
+    network: string,
+    sortBy: string,
+    sortOrder: SortDirection,
+    page: number
+  ) => `dashboard:${network}:${sortBy}:${sortOrder}:p${page}`;
+
+  const readCache = (key: string) => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as {
+        ts: number;
+        payload: {
+          data: Contract[];
+          stats: Stats;
+          networks: string[];
+          pagination: Pagination;
+        };
+      };
+      const now = Date.now();
+      if (now - parsed.ts >= CACHE_TTL_MS) {
+        // Expired: remove immediately
+        localStorage.removeItem(key);
+        return null;
+      }
+      return parsed.payload;
+    } catch {
+      return null;
+    }
+  };
+
+  const writeCache = (key: string, payload: {
+    data: Contract[];
+    stats: Stats;
+    networks: string[];
+    pagination: Pagination;
+  }) => {
+    try {
+      const record = { ts: Date.now(), payload };
+      localStorage.setItem(key, JSON.stringify(record));
+      // Auto-erase after TTL
+      window.setTimeout(() => {
+        const existing = localStorage.getItem(key);
+        if (!existing) return;
+        try {
+          const parsed = JSON.parse(existing) as { ts: number };
+          if (Date.now() - parsed.ts >= CACHE_TTL_MS) {
+            localStorage.removeItem(key);
+          }
+        } catch {
+          localStorage.removeItem(key);
+        }
+      }, CACHE_TTL_MS + 50);
+    } catch {
+      // Ignore quota or serialization errors
+    }
+  };
+
   // ✅ FIXED: Enhanced pagination hook with improved scroll preservation
   const {
     pagination,
@@ -189,9 +250,10 @@ const LeaderboardDashboard: React.FC = () => {
      // ✅ FIXED: Fetch data from API with global sorting support and duplicate call prevention
   const fetchLeaderboardData = async (
     network: string = selectedNetwork,
-     sort: string = "gasSaved", 
-     page: number = currentPage,
-     sortOrder: SortDirection = "desc" // ✅ FIXED: Add sortOrder parameter
+    sort: string = "gasSaved", 
+    page: number = currentPage,
+    sortOrder: SortDirection = "desc", // ✅ FIXED: Add sortOrder parameter
+    bypassCache: boolean = false
   ): Promise<void> => {
      // Prevent duplicate API calls
      if (isApiCallInProgress.current) {
@@ -204,6 +266,24 @@ const LeaderboardDashboard: React.FC = () => {
       setError(null);
        
        console.log(`📡 GLOBAL API Call: page=${page}, network=${network}, sort=${sort}, order=${sortOrder}`);
+
+      // Attempt read from cache when not bypassing
+      const cacheKey = buildCacheKey(network === "all" ? "all" : network, sort, sortOrder, page);
+      if (!bypassCache) {
+        const cached = readCache(cacheKey);
+        if (cached) {
+          setData(cached.data || []);
+          setStats(cached.stats || { totalGasSaved: 0, totalContracts: 0, avgMinBid: 0, uniqueDeployers: 0 });
+          setNetworks(cached.networks || []);
+          setPaginationData(cached.pagination);
+          setInitialLoading(false);
+          console.log(`🗄️ Cache hit: ${cacheKey}`);
+          return;
+        }
+        console.log(`🗄️ Cache miss: ${cacheKey}`);
+      } else {
+        console.log(`🚫 Bypassing cache for: ${cacheKey}`);
+      }
 
       const queryParams = new URLSearchParams({
         network: network === "all" ? "all" : network,
@@ -247,6 +327,25 @@ const LeaderboardDashboard: React.FC = () => {
 
       // Set initial loading to false once first data arrives
       setInitialLoading(false);
+      // Write to cache
+      writeCache(cacheKey, {
+        data: contractsData,
+        stats: result.stats || {
+          totalGasSaved: 0,
+          totalContracts: 0,
+          avgMinBid: 0,
+          uniqueDeployers: 0,
+        },
+        networks: result.networks || [],
+        pagination: {
+          total: result.pagination?.total || 0,
+          limit: result.pagination?.limit || 50,
+          page: result.pagination?.page || 1,
+          totalPages: result.pagination?.totalPages || 0,
+          hasMore: result.pagination?.hasMore || false,
+          hasPrev: result.pagination?.hasPrev || false,
+        },
+      });
       
       console.log(`✅ API Success: page=${page}, contracts=${contractsData.length}`);
     } catch (err) {
@@ -306,8 +405,8 @@ const LeaderboardDashboard: React.FC = () => {
     setRefreshing(true);
     const refreshStartTime = performance.now();
     
-         await Promise.all([
-       fetchLeaderboardData(selectedNetwork, "gasSaved", currentPage, "desc"),
+        await Promise.all([
+      fetchLeaderboardData(selectedNetwork, "gasSaved", currentPage, "desc", true),
        fetchNetworkTotals() // Also refresh network totals in parallel
      ]);
     
@@ -327,7 +426,10 @@ const LeaderboardDashboard: React.FC = () => {
   useEffect(() => {
     resetPagination(); // Reset pagination when filters change
     setInitialLoading(true); // Set initial loading when filters change
-         fetchLeaderboardData(selectedNetwork, "gasSaved", 1, "desc");
+        // Detect hard reload and bypass cache on initial load
+        const nav = performance.getEntriesByType && performance.getEntriesByType('navigation');
+        const isReload = Array.isArray(nav) && nav.length > 0 && (nav[0] as PerformanceNavigationTiming).type === 'reload';
+        fetchLeaderboardData(selectedNetwork, "gasSaved", 1, "desc", !!isReload);
   }, [selectedNetwork, resetPagination]);
 
   // Toast auto-hide effect

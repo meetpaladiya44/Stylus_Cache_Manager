@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMongoClient } from "@/lib/mongodb";
 
+// Disable any Next.js caching for this route
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 // Optimized interface with only required fields for dashboard
 interface Contract {
   contractAddress: string;
@@ -235,17 +239,12 @@ export async function GET(request: NextRequest): Promise<NextResponse<Leaderboar
     // Performance monitoring
     console.log(`⚡ Dashboard API: ${responseTime}ms`);
     
-    // ✅ PERFORMANCE: Aggressive caching for sorting operations
-    const cacheMaxAge = sortBy !== "gasSaved" ? 300 : 60; // 5 min for non-default sorts, 1 min for default
-    const staleWhileRevalidate = cacheMaxAge * 2;
-    const isDefaultSort = sortBy === "gasSaved" && sortOrder === "desc" && page === 1;
-    
     // Performance monitoring and alerting
     if (parseFloat(responseTime) > 1000) {
       console.warn(`⚠️ Slow API response: ${responseTime}ms for ${sortBy}-${sortOrder}-page${page}`);
     }
 
-    // Return response with aggressive caching for better performance
+    // Return response with strict no-cache headers (client handles caching)
     return NextResponse.json({
       success: true,
       data: contracts,
@@ -261,18 +260,15 @@ export async function GET(request: NextRequest): Promise<NextResponse<Leaderboar
       },
     }, {
       headers: {
-        // ✅ PERFORMANCE: Aggressive HTTP caching for sorting operations
-        'Cache-Control': `public, max-age=${cacheMaxAge}, stale-while-revalidate=${staleWhileRevalidate}`,
-        // ETags for efficient cache validation
-        'ETag': `"${network}-${sortBy}-${sortOrder}-${page}"`,
+        // Strictly disable caching at HTTP level
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
         // Response metadata for debugging
         'X-Response-Time': `${responseTime}ms`,
         'X-Total-Count': totalCount.toString(),
-        'X-Cache-Strategy': isDefaultSort ? 'default' : 'sort-optimized',
         // CORS and content type optimization
         'Content-Type': 'application/json',
-        // Prevent unnecessary requests
-        'Vary': 'Accept-Encoding',
       },
     });
 
