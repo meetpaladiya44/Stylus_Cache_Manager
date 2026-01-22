@@ -4,85 +4,48 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BiSolidWallet } from "react-icons/bi";
 import {
-  FiArrowUpRight,
   FiCopy,
-  FiExternalLink,
   FiLogOut,
   FiCheck,
 } from "react-icons/fi";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
-import { useAccount, useEnsName, useDisconnect } from "wagmi";
-// import { CheckIcon } from "lucide-react";
+import { useDisconnect } from "wagmi";
 
 export default function ConnectWallet() {
   const { login, authenticated, user, logout, ready, connectWallet } =
     usePrivy();
   const { wallets } = useWallets();
-  const { address, isConnected } = useAccount();
   const { disconnect: wagmiDisconnect } = useDisconnect();
-  const { data: ensName } = useEnsName({ address });
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [displayAddress, setDisplayAddress] = useState<
-    string | null | `0x${string}` | undefined
-  >(null);
+  const [displayAddress, setDisplayAddress] = useState<string | null>(null);
   const [copiedAddress, setCopiedAddress] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
   const dropdownRef = useRef<any>(null);
 
-  // console.log("------------");
-  // console.log("isConnected", isConnected);
-  // console.log("authenticated", authenticated);
-  // console.log("address", address);
-  // console.log("wallets", wallets);
-  // console.log("ready", ready);
-  // console.log("user", user);
-
-  // Wait for Privy to be ready before making decisions
+  // Get wallet address from Privy's user object (single source of truth)
   useEffect(() => {
-    if (ready) {
-      setIsInitialized(true);
-    }
-  }, [ready]);
-
-  useEffect(() => {
-    // Don't process until Privy is ready
-    if (!isInitialized || !ready) return;
-
-    // Check if there's a social login
-    const hasSocialLogin = user?.google || user?.farcaster;
-
-    // If there's a social login, use the address as-is
-    if (hasSocialLogin && address) {
-      setDisplayAddress(address);
+    if (!ready) return;
+    
+    if (!authenticated || !user) {
+      setDisplayAddress(null);
       return;
     }
 
-    // If user is authenticated but no wallets yet, wait for them to load
-    if (authenticated && wallets.length === 0) {
-      return;
-    }
-
-    // Find connected wallet from Privy wallets
-    const connectedWallet = wallets.find(
-      (wallet) =>
-        wallet.address &&
-        wallet.address === address &&
-        wallet.walletClientType !== "privy" // Prefer external wallets
+    // Priority: 1. User's linked wallet, 2. First wallet from useWallets(), 3. user.wallet
+    const linkedWallet = user.linkedAccounts?.find(
+      (account) => account.type === "wallet"
     );
-
-    if (connectedWallet && authenticated) {
-      setDisplayAddress(connectedWallet.address);
-    } else if (authenticated && address) {
-      // Fallback: if we have an address and user is authenticated, use it
-      setDisplayAddress(address);
-    } else if (!authenticated) {
-      // Clear display address if not authenticated
+    
+    if (linkedWallet && 'address' in linkedWallet) {
+      setDisplayAddress(linkedWallet.address);
+    } else if (wallets && wallets.length > 0 && wallets[0]?.address) {
+      setDisplayAddress(wallets[0].address);
+    } else if (user?.wallet?.address) {
+      setDisplayAddress(user.wallet.address);
+    } else {
+      // For social logins without wallet, still show as connected
       setDisplayAddress(null);
     }
-
-    // Only disconnect if user explicitly logged out (not on page refresh)
-    // Remove the automatic wagmiDisconnect call that was causing issues
-  }, [wallets, address, user, authenticated, ready, isInitialized]);
+  }, [ready, authenticated, user, wallets]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -114,56 +77,49 @@ export default function ConnectWallet() {
 
   const handleLogin = async () => {
     if (!authenticated) {
-      try {
-        await login();
-      } catch (error) {
-        console.error("Login failed:", error);
-      }
+      login();
     } else {
-      // If authenticated but no wallet connected, try to connect
-      if (!displayAddress && (!user?.google && !user?.farcaster)) {
-        try {
-          await connectWallet();
-        } catch (error) {
-          console.error("Wallet connection failed:", error);
-        }
-      }
+      // User is authenticated but wants to connect additional wallet
+      connectWallet();
     }
   };
 
   const handleLogout = async () => {
     try {
+      await logout();
+      wagmiDisconnect();
       setDisplayAddress(null);
       setIsDropdownOpen(false);
-
-      // Disconnect wagmi first, then Privy
-      if (isConnected) {
-        wagmiDisconnect();
-      }
-
-      // Small delay to ensure wagmi disconnection completes
-      setTimeout(async () => {
-        await logout();
-      }, 100);
     } catch (error) {
-      console.error("Logout failed:", error);
+      console.error("Logout error:", error);
     }
   };
 
+  // User is connected if authenticated via Privy (regardless of wallet type)
+  const isWalletConnected = authenticated && ready;
+  
+  // Check if it's a social login (Google, Farcaster, etc.)
+  const hasSocialLogin = user?.google || user?.farcaster || user?.discord || user?.github || user?.email;
+
+  // Get display name for connected user
+  const getDisplayName = () => {
+    if (user?.google?.email) return user.google.email;
+    if (user?.farcaster?.displayName) return user.farcaster.displayName;
+    if (user?.discord?.username) return user.discord.username;
+    if (user?.github?.username) return user.github.username;
+    if (user?.email?.address) return user.email.address;
+    if (displayAddress) return truncateAddress(displayAddress);
+    return "Connected";
+  };
+
   // Don't render anything until Privy is ready
-  if (!isInitialized || !ready) {
+  if (!ready) {
     return (
       <div className="flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
       </div>
     );
   }
-
-  const isWalletConnected = authenticated && (
-    user?.google ||
-    user?.farcaster ||
-    displayAddress !== null
-  );
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -199,7 +155,7 @@ export default function ConnectWallet() {
           >
             <BiSolidWallet className="mr-2 size-6 text-blue-600 group-hover:rotate-6 transition-transform" />
             <span className="font-medium">
-              {displayAddress && truncateAddress(displayAddress)}
+              {displayAddress ? truncateAddress(displayAddress) : getDisplayName()}
             </span>
             <div className="absolute inset-0 bg-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity hover:rounded-full"></div>
           </motion.button>
@@ -217,11 +173,13 @@ export default function ConnectWallet() {
                 <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-4">
                   <p className="text-sm text-black">Connected as:</p>
                   <p className="font-bold text-blue-800 truncate">
-                    {user?.google?.email ||
-                      user?.farcaster?.displayName ||
-                      ensName ||
-                      (displayAddress && truncateAddress(displayAddress))}
+                    {getDisplayName()}
                   </p>
+                  {displayAddress && hasSocialLogin && (
+                    <p className="text-xs text-gray-500 mt-1 truncate">
+                      {truncateAddress(displayAddress)}
+                    </p>
+                  )}
                 </div>
 
                 <div className="divide-y divide-blue-100">

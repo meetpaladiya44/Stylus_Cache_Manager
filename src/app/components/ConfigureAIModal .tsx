@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Brain, Settings, Loader, CirclePlus } from "lucide-react";
+import { Brain, Settings, Loader, CirclePlus, AlertTriangle } from "lucide-react";
 import { BrowserProvider, parseEther, Contract, Eip1193Provider } from "ethers";
 import { toast, Toaster } from "react-hot-toast";
-import { useAccount } from "wagmi";
+import { usePrivy } from "@privy-io/react-auth";
 
 import { DashboardData } from "../../../types";
 
@@ -30,10 +30,13 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
   onClose,
   onUpdateData,
 }) => {
-  const { address: userWalletAddress } = useAccount();
+  const { authenticated: isWalletConnected, ready: privyReady, user } = usePrivy();
   const [balanceAmount, setBalanceAmount] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [balanceError, setBalanceError] = useState<string>("");
+  
+  // Get wallet address from Privy user
+  const userWalletAddress = user?.wallet?.address;
 
   // Use useEffect to disable scrolling when modal is open
   useEffect(() => {
@@ -70,17 +73,26 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
   };
 
   const handleConfigure = async () => {
+    // Check wallet connection FIRST before any loading states
+    if (!privyReady) {
+      toast.error("Please wait for wallet to initialize");
+      return;
+    }
+    
+    if (!isWalletConnected) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+    
+    if (!userWalletAddress) {
+      toast.error("No wallet address found. Please reconnect your wallet.");
+      return;
+    }
+
     setIsLoading(true);
     toast.loading("Processing deposit...", { id: "deposit-loading" });
 
     try {
-      // Validate user wallet address
-      if (!userWalletAddress) {
-        toast.error("Please connect your wallet first", {
-          id: "deposit-loading",
-        });
-        return;
-      }
       // Wallet address format check
       if (!/^0x[a-fA-F0-9]{40}$/.test(userWalletAddress)) {
         toast.error("Invalid wallet address format", { id: "deposit-loading" });
@@ -220,7 +232,7 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
       style={{ margin: "0", padding: "0" }}
     >
       <Toaster position="top-center" reverseOrder={false} />
-      <div className="bg-zinc-800/95 backdrop-blur-xl rounded-2xl p-8 w-full max-w-md m-4 space-y-6 shadow-2xl border border-zinc-700/60 animate-fade-in-scale">
+      <div className="bg-zinc-800/95 backdrop-blur-xl rounded-2xl p-8 w-full max-w-lg m-4 space-y-6 shadow-2xl border border-zinc-700/60 animate-fade-in-scale">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-700/50 pb-4">
           <div className="flex items-center gap-3">
@@ -250,10 +262,25 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
           </button>
         </div>
 
+        {/* Wallet Connection Warning */}
+        {privyReady && !isWalletConnected && (
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-yellow-400" />
+              <span className="text-sm font-semibold text-yellow-300">
+                Wallet Not Connected
+              </span>
+            </div>
+            <p className="text-xs text-yellow-200 leading-relaxed">
+              Please connect your wallet first to add balance for the automation service.
+            </p>
+          </div>
+        )}
+
         {/* Form */}
         <div className="space-y-5">
           <div className="space-y-2">
-            <label className="block text-sm font-semibold text-zinc-300 flex items-center gap-1">
+            <label className="text-sm font-semibold text-zinc-300 flex items-center gap-1">
               Balance Amount (in ETH)
               <span
                 className="text-xs text-zinc-500"
@@ -268,9 +295,10 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
               placeholder={MINIMUM_BALANCE_ETH}
               value={balanceAmount}
               onChange={handleBalanceChange}
+              disabled={!isWalletConnected}
               className={`w-full px-4 py-3 border ${
                 balanceError ? "border-red-500/50" : "border-zinc-600/50"
-              } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all bg-zinc-700/50 hover:bg-zinc-700/70 text-zinc-100 placeholder-zinc-400 shadow-sm`}
+              } rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all bg-zinc-700/50 hover:bg-zinc-700/70 text-zinc-100 placeholder-zinc-400 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed`}
             />
             {balanceError && (
               <p className="text-xs text-red-400 mt-1">{balanceError}</p>
@@ -294,6 +322,7 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
             onClick={handleConfigure}
             disabled={
               isLoading ||
+              !isWalletConnected ||
               !!balanceError ||
               !balanceAmount ||
               parseFloat(balanceAmount || "0") < parseFloat(MINIMUM_BALANCE_ETH)
@@ -304,6 +333,11 @@ const ConfigureAIModal: React.FC<ConfigureAIModalProps> = ({
               <>
                 <Loader className="w-4 h-4 animate-spin" />
                 Configuring...
+              </>
+            ) : !isWalletConnected ? (
+              <>
+                <AlertTriangle className="w-4 h-4" />
+                Connect Wallet First
               </>
             ) : (
               <>

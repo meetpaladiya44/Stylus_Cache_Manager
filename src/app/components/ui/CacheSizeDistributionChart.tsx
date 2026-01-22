@@ -29,7 +29,7 @@ const CacheSizeDistributionChart = ({ chartDataCacheSize, hoveredChart, setHover
         <span className="text-cyan-300 text-sm font-medium">Real-time</span>
       </div>
     </div>
-    <div className="h-64">
+    <div className="h-[55vh]">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={chartDataCacheSize}>
           <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" />

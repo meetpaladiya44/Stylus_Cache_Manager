@@ -33,6 +33,8 @@ const CacheAnalyticsCards: React.FC<CacheAnalyticsCardsProps> = ({
 }) => {
   const cacheGrowth = getGrowth(cacheSize, prevCacheSize ?? null);
   const queueGrowth = getGrowth(queueSize, prevQueueSize ?? null);
+  // Calculate contract entries percentage (entriesCount / 4000)
+  const contractEntriesPercentage = entriesCount > 0 ? (entriesCount / 4000) * 100 : 0;
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       {/* Cache Size Card */}
@@ -42,12 +44,6 @@ const CacheAnalyticsCards: React.FC<CacheAnalyticsCardsProps> = ({
           <div className="flex items-start justify-between mb-4">
             <div className="p-3 bg-blue-500/10 rounded-xl group-hover:bg-blue-500/20 transition-colors duration-300 border border-blue-500/20">
               <Database className="w-6 h-6 text-blue-400" />
-            </div>
-            <div className="flex items-center gap-1 px-2 py-1 bg-blue-500/10 rounded-full border border-blue-500/20" title={cacheGrowth !== null ? `Growth: ${cacheGrowth.toFixed(2)}%` : 'No previous data'}>
-              <ArrowUpCircle className="w-3 h-3 text-blue-400" />
-              <span className="text-xs font-medium text-blue-300">
-                {cacheGrowth !== null ? `${cacheGrowth > 0 ? '+' : ''}${cacheGrowth.toFixed(2)}%` : 'N/A'}
-              </span>
             </div>
           </div>
           <div className="space-y-1">
@@ -76,10 +72,10 @@ const CacheAnalyticsCards: React.FC<CacheAnalyticsCardsProps> = ({
             <div className="p-3 bg-cyan-500/10 rounded-xl group-hover:bg-cyan-500/20 transition-colors duration-300 border border-cyan-500/20">
               <Box className="w-6 h-6 text-cyan-400" />
             </div>
-            <div className="flex items-center gap-1 px-2 py-1 bg-cyan-500/10 rounded-full border border-cyan-500/20" title={queueGrowth !== null ? `Growth: ${queueGrowth.toFixed(2)}%` : 'No previous data'}>
+            <div className="flex items-center gap-1 px-2 py-1 bg-cyan-500/10 rounded-full border border-cyan-500/20" title={`Contract Entries: ${entriesCount}/4000 (${contractEntriesPercentage.toFixed(1)}%)`}>
               <Activity className="w-3 h-3 text-cyan-400" />
               <span className="text-xs font-medium text-cyan-300">
-                {queueGrowth !== null ? `${queueGrowth > 0 ? '+' : ''}${queueGrowth.toFixed(2)}%` : 'N/A'}
+                {contractEntriesPercentage.toFixed(1)}%
               </span>
             </div>
           </div>

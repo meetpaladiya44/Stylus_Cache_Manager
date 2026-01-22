@@ -4,66 +4,48 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BiSolidWallet } from "react-icons/bi";
 import {
-  FiArrowUpRight,
   FiCopy,
-  FiExternalLink,
   FiLogOut,
 } from "react-icons/fi";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
-import { useAccount, useEnsName, useDisconnect } from "wagmi";
+import { useDisconnect } from "wagmi";
 import { CheckIcon } from "lucide-react";
 
 export function ConnectWallet() {
   const { login, authenticated, user, logout, ready, connectWallet } =
     usePrivy();
   const { wallets } = useWallets();
-  const { address, isConnected } = useAccount();
   const { disconnect: wagmiDisconnect } = useDisconnect();
-  const { data: ensName } = useEnsName({ address });
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [displayAddress, setDisplayAddress] = useState<
-    string | null | `0x${string}` | undefined
-  >(null);
+  const [displayAddress, setDisplayAddress] = useState<string | null>(null);
   const [copiedAddress, setCopiedAddress] = useState(false);
   const dropdownRef = useRef<any>(null);
 
-  // console.log("------------");
-  // console.log("isConnected", isConnected);
-  // console.log("authenticated", authenticated);
-  console.log("address", address);
-  // console.log("wallets", wallets);
-  // console.log("ready", ready);
-  // console.log("user", user);
-
+  // Get wallet address from Privy's user object (single source of truth)
   useEffect(() => {
-    // Check if there's a social login
-    const hasSocialLogin = user?.google || user?.farcaster;
-
-    // If there's a social login, don't modify wallet connection
-    if (hasSocialLogin) {
-      setDisplayAddress(address);
+    if (!ready) return;
+    
+    if (!authenticated || !user) {
+      setDisplayAddress(null);
       return;
     }
 
-    // Find the first wallet with a matching address from a real wallet provider
-    const realWallet = wallets.find(
-      (wallet) =>
-        wallet.address === address && wallet.walletClientType !== "privy"
+    // Priority: 1. User's linked wallet, 2. First wallet from useWallets(), 3. Any linked account wallet
+    const linkedWallet = user.linkedAccounts?.find(
+      (account) => account.type === "wallet"
     );
-
-    if (realWallet) {
-      setDisplayAddress(realWallet.address);
+    
+    if (linkedWallet && 'address' in linkedWallet) {
+      setDisplayAddress(linkedWallet.address);
+    } else if (wallets && wallets.length > 0 && wallets[0]?.address) {
+      setDisplayAddress(wallets[0].address);
+    } else if (user?.wallet?.address) {
+      setDisplayAddress(user.wallet.address);
     } else {
+      // For social logins without wallet, still show as connected
       setDisplayAddress(null);
-      if (
-        !hasSocialLogin &&
-        wallets.every((wallet) => wallet.walletClientType === "privy")
-      ) {
-        wagmiDisconnect();
-        console.log("LOGOUT::::::::::");
-      }
     }
-  }, [wallets, address, user]);
+  }, [ready, authenticated, user, wallets]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -97,27 +79,42 @@ export function ConnectWallet() {
     if (!authenticated) {
       login();
     } else {
-      if (!user?.google && !user?.farcaster) {
-        connectWallet();
-      }
+      // User is authenticated but wants to connect additional wallet
+      connectWallet();
     }
   };
 
   const handleLogout = async () => {
-    await logout();
-    if (!user?.google && !user?.farcaster) {
+    try {
+      await logout();
       wagmiDisconnect();
       setDisplayAddress(null);
+      setIsDropdownOpen(false);
+    } catch (error) {
+      console.error("Logout error:", error);
     }
-    setIsDropdownOpen(false);
   };
 
-  const isWalletConnected =
-    user?.google || user?.farcaster || displayAddress !== null;
+  // User is connected if authenticated via Privy (regardless of wallet type)
+  const isWalletConnected = authenticated && ready;
+  
+  // Check if it's a social login (Google, Farcaster, etc.)
+  const hasSocialLogin = user?.google || user?.farcaster || user?.discord || user?.github || user?.email;
+
+  // Get display name for connected user
+  const getDisplayName = () => {
+    if (user?.google?.email) return user.google.email;
+    if (user?.farcaster?.displayName) return user.farcaster.displayName;
+    if (user?.discord?.username) return user.discord.username;
+    if (user?.github?.username) return user.github.username;
+    if (user?.email?.address) return user.email.address;
+    if (displayAddress) return truncateAddress(displayAddress);
+    return "Connected";
+  };
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {!isWalletConnected || !authenticated ? (
+      {!isWalletConnected ? (
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
@@ -149,7 +146,7 @@ export function ConnectWallet() {
           >
             <BiSolidWallet className="mr-2 size-6 text-blue-600 group-hover:rotate-6 transition-transform" />
             <span className="font-medium">
-              {displayAddress && truncateAddress(displayAddress)}
+              {displayAddress ? truncateAddress(displayAddress) : getDisplayName()}
             </span>
             <div className="absolute inset-0 bg-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity hover:rounded-full"></div>
           </motion.button>
@@ -167,11 +164,13 @@ export function ConnectWallet() {
                 <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-4">
                   <p className="text-sm text-gray-600">Connected as:</p>
                   <p className="font-bold text-blue-800 truncate">
-                    {user?.google?.email ||
-                      user?.farcaster?.displayName ||
-                      ensName ||
-                      (displayAddress && truncateAddress(displayAddress))}
+                    {getDisplayName()}
                   </p>
+                  {displayAddress && hasSocialLogin && (
+                    <p className="text-xs text-gray-500 mt-1 truncate">
+                      {truncateAddress(displayAddress)}
+                    </p>
+                  )}
                 </div>
 
                 <div className="divide-y divide-blue-100">

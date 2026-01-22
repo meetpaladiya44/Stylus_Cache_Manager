@@ -170,7 +170,7 @@ const safeContractCall = async (
   }
 };
 
-const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: CacheManagerPageProps) => {
+const CacheManagerPage = ({ networkKey = "arbitrum_one", onNetworkChange }: CacheManagerPageProps) => {
   // Check if wallet is connected - keep this at the top with other hooks
   const { authenticated: isConnected, ready: privyReady } = usePrivy();
   const publicClient = usePublicClient();
@@ -439,9 +439,10 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
       console.log(
         `📦 Chunk ${chunkCount}/${totalChunks}: blocks ${currentBlock} to ${chunkEnd}`
       );
+      // Use single toast ID for chunk scanning to avoid multiple toasts
       toast.loading(
-        `Scanning chunk ${chunkCount}/${totalChunks} (blocks ${currentBlock.toString()} to ${chunkEnd.toString()})...`,
-        { id: `chunk-scan-${chunkCount}` }
+        `Scanning chunk ${chunkCount}/${totalChunks}...`,
+        { id: "data-fetch" }
       );
 
       try {
@@ -538,7 +539,8 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
           await calculateGasAnalysis(updatedAddresses);
 
           toast.success(
-            `Found ${trulyNewPrograms.length} new program addresses!`
+            `Found ${trulyNewPrograms.length} new program addresses!`,
+            { id: "data-fetch" }
           );
         } else {
           console.log("📊 New events found but no new program addresses");
@@ -597,7 +599,8 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
 
           setLoadingGasAnalysis(false);
           toast.success(
-            `Loaded cached data: ${cachedData.programAddresses.length} programs`
+            `Loaded cached data: ${cachedData.programAddresses.length} programs`,
+            { id: "data-fetch" }
           );
           return;
         }
@@ -621,7 +624,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
       const insertBidTopic = "0x" + ethers.id("InsertBid(bytes32,address,uint192,uint64)").slice(2);
 
       console.log(`🔍 Fetching InsertBid events with topic: ${insertBidTopic}`);
-      toast.loading("Fetching contract events using Etherscan API...", { id: "etherscan-fetch" });
+      toast.loading("Fetching contract events...", { id: "data-fetch" });
 
       const logs = await getContractLogs(
         networkKey,
@@ -634,7 +637,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
 
       if (logs.length === 0) {
         console.log("❌ No InsertBid events found");
-        toast.error("No InsertBid events found. Make sure bids have been placed on this contract.");
+        toast.error("No InsertBid events found", { id: "data-fetch" });
         setProgramAddresses([]);
         setGasAnalysisData({
           totalGasWithoutCache: 0,
@@ -689,19 +692,19 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
       } else {
         console.log("ℹ️ No valid program addresses found for gas analysis");
         if (uniquePrograms.length > 0) {
-          toast.error(`Found ${uniquePrograms.length} program addresses but none are valid for gas analysis`);
+          toast.error(`Found ${uniquePrograms.length} addresses but none valid for gas analysis`, { id: "data-fetch" });
         } else {
-          toast.error("No program addresses extracted from events");
+          toast.error("No program addresses extracted from events", { id: "data-fetch" });
         }
       }
 
-      toast.success(`Found ${uniquePrograms.length} program addresses using Etherscan API!`, {
-        id: "etherscan-fetch"
+      toast.success(`Found ${uniquePrograms.length} program addresses!`, {
+        id: "data-fetch"
       });
 
     } catch (error: any) {
       console.error("❌ Error fetching program addresses:", error);
-      toast.error(`Failed to fetch program addresses: ${error.message}`);
+      toast.error(`Failed to fetch data: ${error.message}`, { id: "data-fetch" });
     } finally {
       setLoadingGasAnalysis(false);
     }
@@ -786,8 +789,8 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
       console.log(
         "🎯 Method 1: Attempting to fetch all events in single request..."
       );
-      toast.loading("Attempting to fetch all contract events...", {
-        id: "provider-scan",
+      toast.loading("Fetching contract events...", {
+        id: "data-fetch",
       });
 
       try {
@@ -852,16 +855,16 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
         console.log(
           `✅ Success! Found ${allLogs.length} events in single request`
         );
-        toast.success(`Found ${allLogs.length} events in optimized scan!`, {
-          id: "provider-scan",
+        toast.success(`Found ${allLogs.length} events!`, {
+          id: "data-fetch",
         });
       } catch (error: any) {
         console.warn(
           "⚠️ Single request failed, trying chunked approach:",
           error.message
         );
-        toast.loading("Single request failed, using chunked approach...", {
-          id: "provider-scan",
+        toast.loading("Retrying with different approach...", {
+          id: "data-fetch",
         });
 
         // Method 2: Fall back to chunked scanning
@@ -884,8 +887,8 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
         `📊 Total unique InsertBid events found: ${uniqueLogs.length}`
       );
       toast.success(
-        `Comprehensive scan complete! Found ${uniqueLogs.length} total events.`,
-        { id: "provider-scan" }
+        `Found ${uniqueLogs.length} total events`,
+        { id: "data-fetch" }
       );
 
       if (uniqueLogs.length === 0) {
@@ -972,9 +975,9 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
 
       // Handle specific error types
       if (error.message.includes('429') || error.message.includes('Too Many Requests')) {
-        toast.error("Rate limit exceeded. Please try again in a few minutes.");
+        toast.error("Rate limit exceeded. Try again in a few minutes.", { id: "data-fetch" });
       } else if (error.message.includes('CORS')) {
-        toast.error("Network access issue. Please check your connection.");
+        toast.error("Network access issue. Check your connection.", { id: "data-fetch" });
       } else {
         // Error message handled by main fetchProgramAddresses function
       }
@@ -992,8 +995,8 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
       console.log(
         `⚙️ Calculating gas analysis for ${addresses.length} programs...`
       );
-      toast.loading(`Analyzing gas costs for ${addresses.length} programs...`, {
-        id: "gas-analysis",
+      toast.loading(`Analyzing gas costs (${addresses.length} programs)...`, {
+        id: "data-fetch",
       });
 
       let totalGasWithoutCache = 0;
@@ -1042,11 +1045,10 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
           }
         });
 
-        // Update progress
+        // Update progress - use same ID to replace previous toast
         toast.loading(
-          `Processed ${Math.min(i + batchSize, addresses.length)}/${addresses.length
-          } programs...`,
-          { id: "gas-analysis" }
+          `Processing ${Math.min(i + batchSize, addresses.length)}/${addresses.length} programs...`,
+          { id: "data-fetch" }
         );
 
         // Small delay between batches
@@ -1087,18 +1089,18 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
 
       if (successfulCalculations > 0) {
         toast.success(
-          `Gas analysis complete! Successfully processed ${successfulCalculations}/${addresses.length} programs.`,
-          { id: "gas-analysis" }
+          `Gas analysis complete! ${successfulCalculations}/${addresses.length} programs processed.`,
+          { id: "data-fetch" }
         );
       } else {
         toast.error("Failed to calculate gas data for any programs", {
-          id: "gas-analysis",
+          id: "data-fetch",
         });
       }
     } catch (error: any) {
       console.error("❌ Error calculating gas analysis:", error);
-      toast.error(`Failed to calculate gas analysis: ${error.message}`, {
-        id: "gas-analysis",
+      toast.error(`Gas analysis failed: ${error.message}`, {
+        id: "data-fetch",
       });
     }
   };
@@ -1159,7 +1161,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
             errorMessage = "Unsupported network. Please switch to Arbitrum Sepolia or Arbitrum One.";
           }
 
-          toast.error(errorMessage);
+          toast.error(errorMessage, { id: "initialization" });
         }
       };
 
@@ -1233,11 +1235,8 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
       }
     } catch (error: any) {
       console.error("Error fetching cache size:", error);
-      const errorMessage = showToast
-        ? `Failed to fetch cache size: ${error?.message || error}`
-        : "Error fetching cache size";
       if (showToast) {
-        toast.error(errorMessage);
+        toast.error(`Failed to fetch cache size`, { id: "data-fetch" });
       }
       throw error;
     } finally {
@@ -1274,11 +1273,8 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
       }
     } catch (error: any) {
       console.error("Error fetching decay:", error);
-      const errorMessage = showToast
-        ? `Failed to fetch decay: ${error?.message || error}`
-        : "Error fetching decay";
       if (showToast) {
-        toast.error(errorMessage);
+        toast.error(`Failed to fetch decay`, { id: "data-fetch" });
       }
       throw error;
     } finally {
@@ -1302,11 +1298,8 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
       }
     } catch (error: any) {
       console.error("Error fetching queue size:", error);
-      const errorMessage = showToast
-        ? `Failed to fetch queue size: ${error?.message || error}`
-        : "Error fetching queue size";
       if (showToast) {
-        toast.error(errorMessage);
+        toast.error(`Failed to fetch queue size`, { id: "data-fetch" });
       }
       throw error;
     } finally {
@@ -1326,11 +1319,8 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
       console.log(`✅ Pause status set to: ${paused}`);
     } catch (error: any) {
       console.error("Error checking pause status:", error);
-      const errorMessage = showToast
-        ? `Failed to check if paused: ${error?.message || error}`
-        : "Error checking pause status";
       if (showToast) {
-        toast.error(errorMessage);
+        toast.error(`Failed to check pause status`, { id: "data-fetch" });
       }
       throw error;
     } finally {
@@ -1406,11 +1396,8 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
       console.log(`✅ Entries fetched successfully: ${numberOfEntries} entries`);
     } catch (error: any) {
       console.error("Error fetching entries:", error);
-      const errorMessage = showToast
-        ? `Failed to fetch entries: ${error?.message || error}`
-        : "Error fetching entries";
       if (showToast) {
-        toast.error(errorMessage);
+        toast.error(`Failed to fetch entries`, { id: "data-fetch" });
       }
       throw error;
     } finally {
@@ -1569,7 +1556,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
 
   const fetchSmallestEntries = async (k: any) => {
     if (!k || isNaN(k) || parseInt(k) <= 0) {
-      toast.error("Please enter a valid number greater than 0");
+      toast.error("Please enter a valid number greater than 0", { id: "smallest-entries" });
       return;
     }
 
@@ -1856,33 +1843,38 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: 
       <Toaster
         position="top-center"
         toastOptions={{
-          duration: 4000,
+          duration: 3000,
           style: {
             background: "#27272a",
             color: "#fff",
             border: '1px solid #3f3f46',
           },
           success: {
-            duration: 3000,
+            duration: 2500,
             style: {
               background: "#166534",
               border: '1px solid #15803d',
             },
           },
           error: {
-            duration: 5000,
+            duration: 4000,
             style: {
               background: "#991b1b",
               border: '1px solid #dc2626',
             },
           },
           loading: {
+            duration: Infinity, // Loading toasts must be manually dismissed
             style: {
               background: "#1e40af",
               border: '1px solid #2563eb',
             },
           },
         }}
+        containerStyle={{
+          top: 20,
+        }}
+        gutter={8}
       />
       {!isAuthInitialized ? (
         // Show loading state while Privy initializes
