@@ -12,7 +12,7 @@ function Footer() {
           <div className="flex items-center space-x-2">
             <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
             <span className="text-zinc-400 text-sm font-medium">
-              © 2025 Smart Cache
+              © 2026 Smart Cache
             </span>
             <span className="text-zinc-400 text-sm">|</span>
             <span className="text-zinc-500 text-sm">

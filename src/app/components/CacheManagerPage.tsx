@@ -10,7 +10,6 @@ import {
 } from "@/utils/CacheManagerUtils";
 import { useRouter } from "next/navigation";
 import ConfigureAIModal from "./ConfigureAIModal ";
-import Image from "next/image";
 import { toast, Toaster } from "react-hot-toast";
 import { cacheManagerConfig } from "@/config/CacheManagerConfig";
 import { parseAbiItem } from "viem";
@@ -60,7 +59,6 @@ interface Props {
 
 import { DashboardData } from "../../../types";
 import CacheManagerHeader from "./ui/CacheManagerHeader";
-import ConnectWallet from "./ConnectWallet";
 import { usePrivy } from "@privy-io/react-auth";
 
 type FullDashboardData = DashboardData & {
@@ -90,6 +88,7 @@ type FullDashboardData = DashboardData & {
 
 interface CacheManagerPageProps {
   networkKey?: "arbitrum_sepolia" | "arbitrum_one";
+  onNetworkChange?: (network: "arbitrum_sepolia" | "arbitrum_one") => void;
 }
 
 // Add retry utility function at the top
@@ -171,7 +170,7 @@ const safeContractCall = async (
   }
 };
 
-const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageProps) => {
+const CacheManagerPage = ({ networkKey = "arbitrum_sepolia", onNetworkChange }: CacheManagerPageProps) => {
   // Check if wallet is connected - keep this at the top with other hooks
   const { authenticated: isConnected, ready: privyReady } = usePrivy();
   const publicClient = usePublicClient();
@@ -254,9 +253,9 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
   const COLORS = ["#0088FE", "#00C49F"];
   const config = cacheManagerConfig[networkKey];
 
-  // Cache management constants
-  const CACHE_KEY_PROGRAM_DATA = "cache_program_data_v2";
-  const CACHE_KEY_GAS_ANALYSIS = "cache_gas_analysis_v2";
+  // Cache management constants - network-specific cache keys
+  const CACHE_KEY_PROGRAM_DATA = `cache_program_data_v3_${networkKey}`;
+  const CACHE_KEY_GAS_ANALYSIS = `cache_gas_analysis_v3_${networkKey}`;
   const CACHE_EXPIRY_TIME = 24 * 60 * 60 * 1000; // 24 hours
   const INCREMENTAL_UPDATE_INTERVAL = 60 * 1000; // 1 minute for live updates
 
@@ -561,9 +560,8 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
   };
 
   // Function to fetch all InsertBid events and extract program addresses using Etherscan API
+  // Note: This uses Etherscan API, so wallet connection is NOT required
   const fetchProgramAddresses = async (forceRefresh = false) => {
-    if (!isConnected) return;
-
     try {
       setLoadingGasAnalysis(true);
 
@@ -1105,15 +1103,37 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
     }
   };
 
-  // All useEffect and other hooks must also be called unconditionally
-  // Initial data fetch
+  // Reset state when network changes to ensure fresh data is displayed
   useEffect(() => {
-    // Only fetch data if the user is connected and Privy is ready
-    if (isConnected && isAuthInitialized) {
+    console.log(`🔄 Network changed to: ${networkKey}, resetting state...`);
+    
+    // Reset gas analysis state
+    setGasAnalysisData({
+      totalGasWithoutCache: 0,
+      totalGasWithCache: 0,
+      totalGasSaved: 0,
+    });
+    setProgramAddresses([]);
+    setLastFetchedBlock(null);
+    
+    // Reset other cache-related state
+    setEntries([]);
+    setEntriesCount(0);
+    setCacheSize(null);
+    setDecay(null);
+    setQueueSize(null);
+    setIsPaused(false);
+  }, [networkKey]);
+
+  // All useEffect and other hooks must also be called unconditionally
+  // Initial data fetch - fetches data regardless of wallet connection (read-only operations)
+  useEffect(() => {
+    // Only need Privy to be ready, wallet connection NOT required for reading data
+    if (isAuthInitialized) {
       const initialize = async () => {
         try {
           console.log(`🚀 Initializing CacheManager for network: ${networkKey}`);
-          toast.loading("Loading cache data...", { id: "initialization" });
+          toast.loading(`Loading ${networkKey === 'arbitrum_one' ? 'Arbitrum One' : 'Arbitrum Sepolia'} data...`, { id: "initialization" });
 
           // Validate network before making calls
           const config = cacheManagerConfig[networkKey];
@@ -1123,10 +1143,10 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
 
           console.log(`📋 Using contract address: ${config.contracts.cacheManager.address}`);
 
-          // Fetch all data using Etherscan API
+          // Fetch all data using Etherscan API (doesn't require wallet connection)
           await fetchAllDataWithEtherscan();
 
-          toast.success("Cache data loaded successfully!", {
+          toast.success(`${networkKey === 'arbitrum_one' ? 'Arbitrum One' : 'Arbitrum Sepolia'} data loaded!`, {
             id: "initialization",
           });
         } catch (error: any) {
@@ -1134,7 +1154,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
           let errorMessage = "Failed to initialize cache data";
 
           if (error.message.includes('could not decode result data')) {
-            errorMessage = "Network connection issue. Please check your wallet connection.";
+            errorMessage = "Network connection issue. Please try again.";
           } else if (error.message.includes('Invalid network key')) {
             errorMessage = "Unsupported network. Please switch to Arbitrum Sepolia or Arbitrum One.";
           }
@@ -1145,7 +1165,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
 
       initialize();
     }
-  }, [isConnected, isAuthInitialized, networkKey]); // Add networkKey dependency
+  }, [isAuthInitialized, networkKey]); // Removed isConnected dependency - data fetching works without wallet
 
   // Function to fetch all data using Etherscan API
   const fetchAllDataWithEtherscan = async () => {
@@ -1175,9 +1195,11 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
     }
   };
 
-  // Set up periodic incremental updates for live data
+  // Set up periodic incremental updates for live data (only when wallet is connected)
+  // Note: Incremental updates use publicClient which requires wallet connection
   useEffect(() => {
-    if (!isConnected || !isAuthInitialized || !lastFetchedBlock) return;
+    // Only run incremental updates if wallet connected and we have initial data
+    if (!isConnected || !isAuthInitialized || !lastFetchedBlock || !publicClient) return;
 
     const interval = setInterval(async () => {
       if (!isIncrementalUpdate && !loadingGasAnalysis) {
@@ -1189,7 +1211,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
     }, INCREMENTAL_UPDATE_INTERVAL);
 
     return () => clearInterval(interval);
-  }, [isConnected, isAuthInitialized, lastFetchedBlock, loadingGasAnalysis, isIncrementalUpdate]);
+  }, [isConnected, isAuthInitialized, lastFetchedBlock, loadingGasAnalysis, isIncrementalUpdate, publicClient]);
 
   // Reset current page when entries per page changes
   useEffect(() => {
@@ -1551,11 +1573,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
       return;
     }
 
-    if (!isConnected) {
-      toast.error("Please connect your wallet first");
-      return;
-    }
-
+    // Note: Uses direct RPC calls, wallet connection NOT required
     try {
       setFetchingSmallestEntries(true);
       toast.loading("Fetching smallest entries...", { id: "smallest-entries" });
@@ -1874,39 +1892,16 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
             <p className="text-zinc-400 text-lg">Initializing...</p>
           </div>
         </div>
-      ) : !isConnected ? (
-        // Render the blurred image with connect button when not connected
-        <div className="relative w-full h-screen bg-zinc-900">
-          <div className="absolute inset-0 bg-gradient-to-br from-zinc-900/90 via-zinc-800/80 to-zinc-900/90"></div>
-          <Image
-            src="/image.png"
-            alt="Blurred Cache Manager"
-            fill
-            sizes="100vw"
-            className="opacity-30 object-cover"
-          />
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="text-center space-y-6 p-8 rounded-2xl bg-zinc-800/50 backdrop-blur-xl border border-zinc-700/60 shadow-2xl">
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-zinc-100 to-zinc-300 bg-clip-text text-transparent">
-                Connect your wallet to access SmartCache
-              </h1>
-              <p className="text-zinc-400 text-lg max-w-md mx-auto">
-                Secure access to your cache management dashboard
-              </p>
-              <div className="z-10 relative group w-fit mx-auto">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full blur opacity-20 group-hover:opacity-40 transition duration-300"></div>
-                <div className="relative bg-zinc-800/80 border border-zinc-700/50 rounded-full p-0.5">
-                  <ConnectWallet />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       ) : (
-        // Render the full component when connected
+        // Render the full component (always visible, regardless of wallet connection)
         <div className="min-h-screen bg-zinc-900">
           {/* Header Section */}
-          <CacheManagerHeader isConnected={isConnected} setIsModalOpen={setIsModalOpen} />
+          <CacheManagerHeader 
+            isConnected={isConnected} 
+            setIsModalOpen={setIsModalOpen}
+            networkKey={networkKey}
+            onNetworkChange={onNetworkChange}
+          />
 
           {/* Main Content */}
           <div className="px-6 lg:px-8 py-8 space-y-8">
@@ -1932,6 +1927,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
                 cacheData={cacheData}
                 programAddresses={programAddresses}
                 lastFetchedBlock={lastFetchedBlock}
+                networkKey={networkKey}
               />
               {/* Cache Size Distribution */}
               <CacheSizeDistributionChart
@@ -1985,6 +1981,7 @@ const CacheManagerPage = ({ networkKey = "arbitrum_sepolia" }: CacheManagerPageP
                 isLoading={isLoading}
                 minBid={minBid}
                 handleAskAI={handleAskAI}
+                isConnected={isConnected}
               />
               <FetchSmallestEntries
                 smallestEntriesCount={smallestEntriesCount}

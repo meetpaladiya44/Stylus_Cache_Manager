@@ -14,7 +14,13 @@ interface CacheSavingsAnalysisProps {
   cacheData: { name: string; value: number }[];
   programAddresses: string[];
   lastFetchedBlock: bigint | null;
+  networkKey: "arbitrum_sepolia" | "arbitrum_one";
 }
+
+const networkNames = {
+  arbitrum_sepolia: "Arbitrum Sepolia",
+  arbitrum_one: "Arbitrum One",
+};
 
 const CacheSavingsAnalysis: React.FC<CacheSavingsAnalysisProps> = ({
   loadingGasAnalysis,
@@ -24,8 +30,10 @@ const CacheSavingsAnalysis: React.FC<CacheSavingsAnalysisProps> = ({
   cacheData,
   programAddresses,
   lastFetchedBlock,
+  networkKey,
 }) => {
   const [hoverColor, setHoverColor] = React.useState("");
+  const networkName = networkNames[networkKey];
 
   return (
     <motion.div
@@ -71,10 +79,10 @@ const CacheSavingsAnalysis: React.FC<CacheSavingsAnalysisProps> = ({
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
-              <p className="text-gray-600">
-                Fetching program addresses...
+              <p className="text-zinc-300 font-medium">
+                Fetching {networkName} data...
               </p>
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-zinc-400 mt-1">
                 Calculating gas savings from recent bids
               </p>
             </div>
@@ -223,21 +231,27 @@ const CacheSavingsAnalysis: React.FC<CacheSavingsAnalysisProps> = ({
           </div>
         </div>
       </div>
-      <div className="mt-4 p-3 bg-gray-50 rounded-xl">
-        <div className="flex items-center justify-between text-sm text-gray-600">
+      <div className="mt-4 p-3 bg-zinc-700/30 rounded-xl border border-zinc-600/30">
+        <div className="flex items-center justify-between text-sm text-zinc-300">
           <span>
-            Programs analyzed: <strong>{programAddresses.length}</strong>
+            Programs analyzed: <strong className="text-zinc-100">{programAddresses.length}</strong>
           </span>
           {gasAnalysisData.totalGasSaved > 0 && (
             <span>
-              Average savings per program: <strong>{Math.round(gasAnalysisData.totalGasSaved / programAddresses.length).toLocaleString()}</strong> gas units
+              Avg savings: <strong className="text-zinc-100">{Math.round(gasAnalysisData.totalGasSaved / programAddresses.length).toLocaleString()}</strong> gas
             </span>
           )}
         </div>
-        <p className="text-xs text-gray-400 mt-1">
-          Data based on {lastFetchedBlock ? `blockchain data up to block ${lastFetchedBlock.toString()}` : "recent events from the cache manager contract"} •
-          {isIncrementalUpdate ? " Live updating..." : " Auto-updates every minute"}
-        </p>
+        <div className="flex items-center justify-between text-xs text-zinc-400 mt-2">
+          <span className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${networkKey === 'arbitrum_one' ? 'bg-blue-400' : 'bg-yellow-400'}`}></span>
+            {networkName}
+          </span>
+          <span>
+            {lastFetchedBlock ? `Block ${lastFetchedBlock.toString()}` : "Fetching..."} •
+            {isIncrementalUpdate ? " Live" : " Cached 1hr"}
+          </span>
+        </div>
       </div>
     </motion.div>
   );
